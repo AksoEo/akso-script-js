@@ -47,9 +47,6 @@ function evaluateScoped (definitions, id, getFormValue) {
     } else if (item.t === 'f') {
         // define a function
 
-        // stdlib functions are defined in javascript already
-        if (typeof item.b === 'function') return item.b;
-
         // define an inner function that contains the body
         let f = (params) => {
             const functionScope = {
@@ -94,8 +91,10 @@ function evaluateScoped (definitions, id, getFormValue) {
         return null;
     } else if (item.t === VM_FN_PARAM) {
         // function parameter in the vm (lazy)
-        // FIXME: stdlib calling functions will not use lazy params
-        return typeof item.get === 'function' ? item.get() : item.get;
+        return item.get();
+    } else if (typeof item === 'function') {
+        // stdlib function
+        return item;
     } else {
         // unknown definition type
         throw new Error(`Unknown definition type ${item.t}`);
@@ -103,7 +102,7 @@ function evaluateScoped (definitions, id, getFormValue) {
 }
 
 function evaluate (definitions, id) {
-    return evaluateScoped({ ...stdlib(evaluate), ...definitions }, id);
+    return evaluateScoped({ ...stdlib, ...definitions }, id);
 }
 
 module.exports = evaluate;
