@@ -76,5 +76,10 @@ assertEq(call(stdlib.contains, [1, 2], 3), false);
 assertEq(call(stdlib.contains, 'cat', 3), false);
 assertEq(call(stdlib.contains, 'cat', 'at'), true);
 assertEq(call(stdlib.contains, ['cat', null], null), true);
-
-console.log('All tests passed');
+assertEq(call(stdlib.date_sub, 'years', '2019-01-01', '2019-01-01'), 0);
+assertEq(call(stdlib.date_sub, 'months', '2019-02-01', '2019-01-01'), 1);
+assertEq(call(stdlib.date_sub, 'months', '2019-05-03', '2019-01-01'), 4 + 2 / 31);
+assertEq(call(stdlib.date_sub, 'months', '2019-05-01', '2019-01-03'), 4 - 2 / 31);
+assertEq(call(stdlib.date_sub, 'cats', '2019-05-03', '2019-01-01'), null);
+assertEq(call(stdlib.date_add, 'years', '2019-01-01', 1), '2020-01-01');
+assertEq(call(stdlib.date_add, 'days', '2019-01-01', 3), '2019-01-04');

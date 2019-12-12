@@ -2,9 +2,8 @@ const stdlib = require('./stdlib');
 
 const VM_FN_PARAM = Symbol('fn-param');
 const NOT_EVALUATED = Symbol('?');
-const DEBUG = false;
 
-function evaluateScoped (definitions, id, getFormValue) {
+function evaluateScoped (definitions, id, context) {
     const item = definitions[id];
     if (!item) throw new Error(`Unknown definition ${id}`);
 
@@ -14,10 +13,10 @@ function evaluateScoped (definitions, id, getFormValue) {
         let value;
         if (item.f.startsWith('@')) {
             // this is a form variable
-            value = getFormValue(item.f.substr(1));
+            value = context.getFormValue(item.f.substr(1));
         } else {
             // resolve it from definitions otherwise
-            value = evaluateScoped(definitions, item.f, getFormValue);
+            value = evaluateScoped(definitions, item.f, context);
         }
 
         const debugArgs = item.a.map(() => NOT_EVALUATED);
@@ -26,22 +25,20 @@ function evaluateScoped (definitions, id, getFormValue) {
         for (let i = 0; i < item.a.length; i++) {
             if (typeof value === 'function') {
                 const argumentName = item.a[i];
-                // value = value(() => evaluateScoped(definitions, argumentName, getFormValue));
                 const index = i;
                 value = value(() => {
-                    const v = evaluateScoped(definitions, argumentName, getFormValue)
-                    debugArgs[index] = v;
+                    const v = evaluateScoped(definitions, argumentName, context)
+                    if (context.debug > 1) debugArgs[index] = v;
                     return v;
                 });
             } else {
                 // too many arguments
-                // TODO: warn about this maybe
-                if (DEBUG) console.log('too many args!');
+                if (context.debug > 0) console.warn(`too many args for ${item.f} in`, item);
                 break;
             }
         }
 
-        if (DEBUG) console.log(item.f, debugArgs, '->', value);
+        if (context.debug > 1) console.debug(item.f, debugArgs, '->', value);
 
         return value;
     } else if (item.t === 'f') {
@@ -54,7 +51,7 @@ function evaluateScoped (definitions, id, getFormValue) {
                 ...item.b, // function body
                 ...params, // and the parameters
             };
-            return evaluateScoped(functionScope, '=', getFormValue);
+            return evaluateScoped(functionScope, '=', context);
         };
 
         if (item.p.length === 0) {
@@ -82,7 +79,7 @@ function evaluateScoped (definitions, id, getFormValue) {
         return c({}, 0);
     } else if (item.t === 'l') {
         // construct a list
-        return item.v.map(name => evaluateScoped(definitions, name, getFormValue));
+        return item.v.map(name => evaluateScoped(definitions, name, context));
     } else if (item.t === 'n' || item.t === 'm' || item.t === 's' || item.t === 'b') {
         // constant types
         return item.v;
@@ -101,20 +98,24 @@ function evaluateScoped (definitions, id, getFormValue) {
     }
 }
 
-function evaluate (definitions, id) {
-    return evaluateScoped({ ...stdlib, ...definitions }, id);
+/// Evaluates a definition.
+///
+/// # Parameters
+/// - definitions: definitions object
+/// - id: definition name to evaluate
+/// - getFormValue: (name: string) => value:
+///   will be used to get the value of @-prefixed identifiers.
+///   value must be one of: null, bool, number, string, or an array of any of these values
+///   (including arrays).
+/// - debug: optional. set to 1 to warn about applying to values, set to 2 to log every function
+///   call
+function evaluate (definitions, id, getFormValue, debug = 0) {
+    const context = {
+        getFormValue,
+        debug,
+    };
+    return evaluateScoped({ ...stdlib, ...definitions }, id, context);
 }
 
 module.exports = evaluate;
 module.exports.evaluateScoped = evaluateScoped;
-
-let input = '';
-process.stdin.setEncoding('utf-8');
-process.stdin.on('data', chunk => input += chunk);
-process.stdin.resume();
-process.stdin.on('end', () => {
-    console.log(input);
-    const defs = JSON.parse(input);
-    for (const k in defs) console.log(k, '->', evaluate(defs, k));
-});
-

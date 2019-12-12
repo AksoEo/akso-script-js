@@ -1,3 +1,38 @@
+// Maps currencies to their smallest unit multiplier
+const currencies = {
+    USD: 100,
+    AUD: 100,
+    CAD: 100,
+    CHF: 100,
+    DKK: 100,
+    EUR: 100,
+    GBP: 100,
+    HKD: 100,
+    JPY: 1000,
+    MXN: 100,
+    MYR: 100,
+    NOK: 100,
+    NZD: 100,
+    PLN: 100,
+    SEK: 100,
+    SGD: 100,
+};
+
+const months = [
+    'januaro',
+    'februaro',
+    'marto',
+    'aprilo',
+    'majo',
+    'junio',
+    'julio',
+    'aŭgusto',
+    'septembro',
+    'oktobro',
+    'novembro',
+    'decembro',
+];
+
 /// Compares a with b. Will deep-compare objects and arrays and return false for type mismatches.
 function eq (a, b) {
     if (Array.isArray(a) && Array.isArray(b)) {
@@ -300,11 +335,102 @@ module.exports = {
         return items;
     },
 
-    // TODO: date stuff
+    date_sub: t => a => b => {
+        const dt = t();
+        if (dt !== 'years' && dt !== 'months' && dt !== 'weeks' && dt !== 'days') return null;
+        const da = parseDateString(a());
+        const db = parseDateString(b());
+        if (da === null || db === null) return null;
+        if (dt === 'years') return subMonths(da, db) / 12;
+        else if (dt === 'months') return subMonths(da, db);
+        else if (dt === 'weeks') return (da - db) / (1000 * 86400 * 7);
+        else if (dt === 'days') return (da - db) / (1000 * 86400);
+    },
+    date_add: t => a => b => {
+        const dt = t();
+        if (dt !== 'years' && dt !== 'months' && dt !== 'weeks' && dt !== 'days') return null;
+        const da = parseDateString(a());
+        if (da === null) return null;
+        const db = b();
+        if (typeof db !== 'number') return null;
+        if (dt === 'years') da.setFullYear(da.getFullYear() + db);
+        else if (dt === 'months') da.setMonth(da.getMonth() + db);
+        else if (dt === 'weeks') da.setDate(da.getDate() + db * 7);
+        else if (dt === 'days') da.setDate(da.getDate() + db);
+        return dateToString(da);
+    },
+    get date_today () {
+        return { t: 's', v: dateToString(new Date()) };
+    },
+    date_fmt: a => {
+        const da = parseDateString(a());
+        if (da === null) return null;
+        return formatDate(da);
+    },
+    get time_now () {
+        return { t: 's', v: new Date() / 1000 };
+    },
+    datetime_fmt: a => {
+        const da = a();
+        if (typeof da !== 'number') return null;
+        const date = new Date(da * 1000);
+        return formatDate(date) + ' ' + formatTime(date);
+    },
 
     if: a => b => c => a() === true ? b() : c(),
-    // TODO: format_currency
+    format_currency: a => b => {
+        const da = a();
+        if (!(da in currencies)) return null;
+        const db = b();
+        if (typeof db !== 'number') return null;
+        return (db / currencies[da]).toLocaleString('eo-EO', { style: 'currency', currency: da });
+    },
     id: a => a(),
 
     ...extras,
 };
+
+function parseDateString (s) {
+    if (typeof s !== 'string') return null;
+    const match = s.match(/^\d{4}-\d{2}-\d{2}$/);
+    if (!match) return null;
+    return new Date(s);
+}
+
+const padz = (s, n) => (s + n).substr(-s.length);
+function dateToString (d) {
+    return padz('0000', d.getUTCFullYear()) + '-' + padz('00', d.getUTCMonth() + 1) + '-' + padz('00', d.getUTCDate());
+}
+
+function daysInMonth (year, month) {
+    return new Date(year, month + 1, 0).getDate();
+}
+
+function subMonths (a, b) {
+    let delta = (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
+    const offsetB = new Date(b);
+    offsetB.setMonth(offsetB.getMonth() + delta);
+
+    if (a > offsetB) {
+        // inside month: offsetB ----- a ----> time
+        // need to add a->date - offsetB->date but normalized to the month
+        const dayDiff = a.getDate() - offsetB.getDate();
+        const totalDays = daysInMonth(a.getFullYear(), a.getMonth());
+        delta += dayDiff / totalDays;
+    } else {
+        // inside month: a ----- offsetB ----> time
+        // need to subtract offsetB->date - a->date but normalized to the month
+        const dayDiff = offsetB.getDate() - a.getDate();
+        const totalDays = daysInMonth(a.getFullYear(), a.getMonth());
+        delta -= dayDiff / totalDays;
+    }
+
+    return delta;
+}
+
+function formatDate (d) {
+    return d.getUTCDate() + '-a de ' + months[d.getUTCMonth()] + ', ' + d.getUTCFullYear();
+}
+function formatTime (date) {
+    return padz('00', date.getUTCHours()) + ':' + padz('00', date.getUTCMinutes());
+}
