@@ -368,7 +368,7 @@ module.exports = {
         return formatDate(da);
     },
     get time_now () {
-        return { t: 's', v: new Date() / 1000 };
+        return { t: 'n', v: new Date() / 1000 };
     },
     datetime_fmt: a => {
         const da = a();

@@ -109,6 +109,8 @@ function evaluateScoped (definitions, id, context) {
 ///   (including arrays).
 /// - debug: optional. set to 1 to warn about applying to values, set to 2 to log every function
 ///   call
+///
+/// This function will throw if it encounters unknown definitions.
 function evaluate (definitions, id, getFormValue, debug = 0) {
     const context = {
         getFormValue,
