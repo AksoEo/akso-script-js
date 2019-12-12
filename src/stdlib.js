@@ -292,8 +292,8 @@ module.exports = {
         if (da === null || !da[Symbol.iterator]) return null;
         const items = [...da];
         items.sort((a, b) => {
-            if (typeof a === 'number' && b === 'number') return a - b;
-            if (typeof a === 'string' && b === 'string') return a > b ? 1 : a < b ? -1 : 0;
+            if (typeof a === 'number' && typeof b === 'number') return a - b;
+            if (typeof a === 'string' && typeof b === 'string') return a > b ? 1 : a < b ? -1 : 0;
             return 0;
         });
         if (typeof da === 'string') return items.join('');
