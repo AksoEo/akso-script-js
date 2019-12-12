@@ -255,7 +255,8 @@ pub(crate) fn parse_number(s: String) -> f64 {
 pub(crate) fn parse_string(s: String) -> String {
     let mut out = String::with_capacity(s.len() - 2);
     let mut escape_next = false;
-    for c in s.chars().skip(1) { // skip " at the beginning
+    for c in s.chars().skip(1) {
+        // skip " at the beginning
         if !escape_next && c == '\\' {
             escape_next = true;
         } else if escape_next {

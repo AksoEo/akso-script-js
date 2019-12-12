@@ -14,42 +14,42 @@ pub enum Def {
     #[serde(rename = "n")]
     Number {
         #[serde(rename = "v")]
-        value: f64
+        value: f64,
     },
     #[serde(rename = "s")]
     String {
         #[serde(rename = "v")]
-        value: String
+        value: String,
     },
     #[serde(rename = "m")]
     Matrix {
         #[serde(rename = "v")]
-        value: Vec<Value>
+        value: Vec<Value>,
     },
     #[serde(rename = "b")]
     Bool {
         #[serde(rename = "v")]
-        value: bool
+        value: bool,
     },
-    #[serde(rename = "n")]
+    #[serde(rename = "u")]
     Null,
     #[serde(rename = "l")]
     List {
         #[serde(rename = "v")]
-        items: Vec<Id>
+        items: Vec<Id>,
     },
     #[serde(rename = "c")]
     Call {
         f: Id,
         #[serde(rename = "a")]
-        args: Vec<Id>
+        args: Vec<Id>,
     },
     #[serde(rename = "f")]
     Fn {
         #[serde(rename = "p")]
         params: Vec<Id>,
         #[serde(rename = "b")]
-        body: Defs
+        body: Defs,
     },
 }
 
@@ -351,7 +351,11 @@ fn compile_expr<'a>(
     Ok(defs)
 }
 
-fn compile_decl<'a>(out: Id, decl: Decl, ctx: &mut CompileContext<'a>) -> Result<Defs, CompileError> {
+fn compile_decl<'a>(
+    out: Id,
+    decl: Decl,
+    ctx: &mut CompileContext<'a>,
+) -> Result<Defs, CompileError> {
     if decl.params.is_empty() {
         // constant
         let mut decl_ctx = ctx.create_pseudo_child();

@@ -86,7 +86,7 @@ function evaluateScoped (definitions, id, getFormValue) {
     } else if (item.t === 'n' || item.t === 'm' || item.t === 's' || item.t === 'b') {
         // constant types
         return item.v;
-    } else if (item.t === 'n') {
+    } else if (item.t === 'u') {
         // null type
         return null;
     } else if (item.t === VM_FN_PARAM) {
