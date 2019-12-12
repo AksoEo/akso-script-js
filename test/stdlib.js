@@ -49,6 +49,8 @@ assertEq(call(stdlib.map, (a => a() + 1), [0, 1, 2]), [1, 2, 3]);
 assertEq(call(stdlib.map, (a => a() + 1), 0), 1);
 assertEq(call(stdlib.map, (a => a() + 1), null), null);
 assertEq(call(stdlib.map, (a => a() + 'cat'), 'ab'), ['acat', 'bcat']);
+assertEq(call(stdlib.map, call(stdlib['+'], 1), [0, 1]), [1, 2]);
+assertEq(call(stdlib.map, 1, [2, 3]), [1, 1]);
 assertEq(call(stdlib.flat_map, (a => [a(), a() + 1]), [0, 2]), [0, 1, 2, 3]);
 assertEq(call(stdlib.flat_map, (a => [a(), a() + 1]), 0), [0, 1]);
 assertEq(call(stdlib.flat_map, (a => a() + 'cat'), 'ab'), 'acatbcat');
