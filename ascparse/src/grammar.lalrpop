@@ -1,0 +1,66 @@
+use crate::ast::*;
+
+grammar;
+
+pub Program: Program = {
+    <d:Decl> <e:(";" Decl)*> (";")? => {
+        let mut f = vec![d];
+        f.append(&mut e.into_iter().map(|(_, d)| d).collect());
+        Program(f)
+    }
+};
+
+Decl: Decl = {
+    <i:InfixIdent> <p:Ident*> "=" <e:Expr> => Decl { name: i, params: Vec::new(), body: e },
+    <i:Ident> <p:Ident*> "=" <e:Expr> => Decl { name: i, params: p, body: e },
+};
+
+Expr: Expr = {
+    "let" <d:Decl> <dx:("," Decl)*> (",")? "in" <e:Expr> => {
+        let mut f = vec![d];
+        f.append(&mut dx.into_iter().map(|(_, d)| d).collect());
+        let mut expr = Expr::Let(Box::new(f.pop().unwrap()), Box::new(e));
+        for d in f.into_iter().rev() {
+            expr = Expr::Let(Box::new(d), Box::new(expr));
+        }
+        expr
+    },
+    // function application
+    <e:ApplySubExpr> <o:Op> <a:Expr> => fix_expr_prec(Expr::Apply(Box::new(e), Op::Infix(o), Box::new(a))),
+    <e:ApplySubExpr> <i:InfixIdent> <a:Expr> => fix_expr_prec(Expr::Apply(Box::new(e), Op::Infix(i), Box::new(a))),
+    <e:ApplySubExpr> <a:Expr> => fix_expr_prec(Expr::Apply(Box::new(e), Op::Apply, Box::new(a))),
+    <l:Lambda> => Expr::Lambda(Box::new(l)),
+    ApplySubExpr,
+};
+
+Op: Ident = r"[!#$%^&*+\-/'<>=|]+" => Ident(<>.to_string());
+
+ApplySubExpr: Expr = {
+    "true" => Expr::Bool(true),
+    "false" => Expr::Bool(false),
+    "null" => Expr::Null,
+    // parentheticals
+    "{" <e:Expr> "}" => Expr::Group(Box::new(e)),
+    "(" <i:InfixIdent> ")" => Expr::Ident(i),
+    "(" <e:Expr> ")" => Expr::Group(Box::new(e)),
+    // lists
+    "[" <e:Expr?> <f:("," Expr)*> (",")? "]" => {
+        let mut g = Vec::new();
+        if let Some(e) = e {
+            g.push(e);
+        }
+        g.append(&mut f.into_iter().map(|(_, e)| e).collect());
+        Expr::List(g)
+    },
+    // identifiers and literals
+    <i:Ident> => Expr::Ident(i),
+    <n:Number> => Expr::Number(parse_number(n)),
+    <s:String> => Expr::String(parse_string(s)),
+};
+
+Ident: Ident = r"[_a-zA-Z@][a-zA-Z0-9!@#$%^&*_+\-/'<>=|]*" => Ident(<>.to_string());
+InfixIdent: Ident = r"`[_a-zA-Z0-9!@#$%^&*_+\-/'<>=|]+`" => Ident(<>[1..<>.len() - 1].to_string());
+Number: String = r"[+\-]?(0b[01]+|0o[0-7]+|0x[0-9a-fA-f]+|(0|[1-9][0-9]*)(\.[0-9]+)?(e[+\-]?[0-9]+)?)" => <>.to_string();
+String: String = r#""([^\\"]*(\\")?)*""# => <>.to_string();
+
+Lambda: Lambda = "\\" <p:Ident+> "->" <e:Expr> => Lambda { params: p, body: e };
