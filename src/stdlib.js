@@ -8,7 +8,7 @@ const currencies = {
     EUR: 100,
     GBP: 100,
     HKD: 100,
-    JPY: 1000,
+    JPY: 1,
     MXN: 100,
     MYR: 100,
     NOK: 100,

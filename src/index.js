@@ -4,6 +4,8 @@ const VM_FN_PARAM = Symbol('fn-param');
 const NOT_EVALUATED = Symbol('?');
 
 function evaluateScoped (definitions, id, context) {
+    if (context.shouldHalt()) throw new Error('Terminated by shouldHalt');
+
     const item = definitions[id];
     if (!item) throw new Error(`Unknown definition ${id}`);
 
@@ -107,14 +109,18 @@ function evaluateScoped (definitions, id, context) {
 ///   will be used to get the value of @-prefixed identifiers.
 ///   value must be one of: null, bool, number, string, or an array of any of these values
 ///   (including arrays).
-/// - debug: optional. set to 1 to warn about applying to values, set to 2 to log every function
-///   call
+/// - options: additional options (all optional)
+///     - debug: set to 1 to warn about applying to values, set to 2 to log every function call
+///     - shouldHalt: pass a closure that returns a boolean when called to limit the allowed time
+///       for which the script may run. Note that this will be called very often and should hence
+///       be fast to compute. Halting this way will throw an error.
 ///
 /// This function will throw if it encounters unknown definitions.
-function evaluate (definitions, id, getFormValue, debug = 0) {
+function evaluate (definitions, id, getFormValue, options = {}) {
     const context = {
         getFormValue,
-        debug,
+        debug: options.debug,
+        shouldHalt: options.shouldHalt || (() => false),
     };
     return evaluateScoped({ ...stdlib, ...definitions }, id, context);
 }
