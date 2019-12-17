@@ -1,16 +1,20 @@
 {
   "name": "@tejo/akso-script",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "",
   "main": "dist/index",
   "module": "dist-esm/index",
-  "files": ["dist", "dist-esm"],
+  "files": [
+    "dist",
+    "dist-esm"
+  ],
   "scripts": {
     "test": "node test",
     "start": "node cli.js",
     "prepare": "node build.js && node build.js esm"
   },
   "author": "",
+  "repository": "git://github.com/AksoEo/akso-script-js.git",
   "license": "ISC",
   "devDependencies": {
     "@babel/core": "^7.7.5",

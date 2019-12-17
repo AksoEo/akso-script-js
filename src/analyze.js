@@ -65,7 +65,7 @@ export function analyzeAll (definitions, formValues) {
 /// - id: id to analyze
 /// - context: object of { cache: WeakMap, path: string[] }
 export function analyzeScoped (definitions, id, context) {
-    if (typeof id !== 'string') {
+    if (typeof id !== 'string' && typeof id !== 'symbol') {
         return {
             valid: false,
             error: Error.INVALID_FORMAT,
@@ -73,8 +73,8 @@ export function analyzeScoped (definitions, id, context) {
         }
     }
 
-    if (id.startsWith('@')) {
-        const ty = context.getFormValueType(id);
+    if (typeof id === 'string' && id.startsWith('@')) {
+        const ty = context.getFormValueType(id.substr(1));
         if (ty) return { valid: true, type: ty };
     }
 
@@ -89,7 +89,7 @@ export function analyzeScoped (definitions, id, context) {
         };
     };
 
-    if (id.startsWith('@')) {
+    if (typeof id === 'string' && id.startsWith('@')) {
         return {
             valid: false,
             error: {
