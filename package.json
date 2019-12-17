@@ -2,11 +2,23 @@
   "name": "akso-script",
   "version": "1.0.0",
   "description": "",
-  "main": "src/index",
+  "main": "dist/index",
+  "module": "dist-esm/index",
+  "files": ["dist", "dist-esm"],
   "scripts": {
     "test": "node test",
-    "start": "node cli.js"
+    "start": "node cli.js",
+    "prepublish": "node build.js && node build.js esm"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.7.5",
+    "@babel/preset-env": "^7.7.6",
+    "rollup": "^1.27.13",
+    "rollup-plugin-babel": "^4.3.3"
+  },
+  "dependencies": {
+    "core-js": "^3.5.0"
+  }
 }

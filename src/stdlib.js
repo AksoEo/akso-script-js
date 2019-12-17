@@ -199,7 +199,7 @@ const extras = {
     },
 };
 
-module.exports = {
+export default {
     '+': defBinMath((a, b) => a + b),
     '-': defBinMath((a, b) => a - b),
     '*': defBinMath((a, b) => a * b),

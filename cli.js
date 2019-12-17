@@ -1,4 +1,4 @@
-const evaluate = require('.');
+const { evaluate } = require('.');
 let input = '';
 process.stdin.setEncoding('utf-8');
 process.stdin.on('data', chunk => input += chunk);
