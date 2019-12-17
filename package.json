@@ -1,6 +1,6 @@
 {
-  "name": "akso-script",
-  "version": "1.0.0",
+  "name": "@tejo/akso-script",
+  "version": "0.1.0",
   "description": "",
   "main": "dist/index",
   "module": "dist-esm/index",
@@ -8,7 +8,7 @@
   "scripts": {
     "test": "node test",
     "start": "node cli.js",
-    "prepublish": "node build.js && node build.js esm"
+    "prepare": "node build.js && node build.js esm"
   },
   "author": "",
   "license": "ISC",
