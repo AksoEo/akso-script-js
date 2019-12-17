@@ -1,9 +1,12 @@
 import { TopType, UnionType, ConcreteType, stdlibTypes } from './types';
 
+// TODO: detect non-primitive recursion
+
 export const Errors = {
     LEADING_AT_IDENT: 'leading @ in identifier',
     NOT_IN_SCOPE: 'definition not in scope',
     UNKNOWN_DEF_TYPE: 'unknown definition type',
+    INVALID_FORMAT: 'invalid format',
 };
 
 const Types = ConcreteType.types;
@@ -26,6 +29,9 @@ function buildContext (formValues) {
 /// Analyzes the given definitions. Returns an object with a `valid` key.
 /// If the result is valid, will also have a `type` key, else an `error` key.
 ///
+/// Keep in mind that it is not entirely possible to rule out a stack overflow with untrusted data,
+/// so it might be best to wrap this in a try/catch.
+///
 /// # Parameters
 /// - definitions: definitions object
 /// - id: name of the definition to analyze
@@ -43,11 +49,11 @@ export function analyze (definitions, id, formValues) {
 ///
 /// # Parameters
 // See `analyze(...)`
-export function analyzeAll (definitions, id, formValues) {
+export function analyzeAll (definitions, formValues) {
     const [stdDefs, context] = buildContext(formValues);
     const data = {};
     const defs = { ...stdDefs, ...definitions };
-    for (const k in definitions) data[k] = analyzeScoped(defs, id, context);
+    for (const k in definitions) data[k] = analyzeScoped(defs, k, context);
     return data;
 }
 
@@ -59,6 +65,14 @@ export function analyzeAll (definitions, id, formValues) {
 /// - id: id to analyze
 /// - context: object of { cache: WeakMap, path: string[] }
 export function analyzeScoped (definitions, id, context) {
+    if (typeof id !== 'string') {
+        return {
+            valid: false,
+            error: Error.INVALID_FORMAT,
+            path: context.path.concat(['' + id]),
+        }
+    }
+
     if (id.startsWith('@')) {
         const ty = context.getFormValueType(id);
         if (ty) return { valid: true, type: ty };
@@ -85,6 +99,18 @@ export function analyzeScoped (definitions, id, context) {
         };
     }
 
+    const invalidFormatError = {
+        valid: false,
+        error: {
+            type: Errors.INVALID_FORMAT,
+            path: context.path.concat([id]),
+        },
+    };
+
+    if (typeof item !== 'object' || item === null) {
+        return invalidFormatError;
+    }
+
     // return cached if it exists
     if (context.cache.has(item)) return context.cache.get(item);
 
@@ -96,14 +122,25 @@ export function analyzeScoped (definitions, id, context) {
     if (item.t === 'u') {
         type = new ConcreteType(Types.NULL);
     } else if (item.t === 'b') {
+        if (typeof item.v !== 'boolean') return invalidFormatError;
         type = new ConcreteType(Types.BOOL);
     } else if (item.t === 'n') {
+        if (typeof item.v !== 'number') return invalidFormatError;
         type = new ConcreteType(Types.NUMBER);
     } else if (item.t === 's') {
+        if (typeof item.v !== 'string') return invalidFormatError;
         type = new ConcreteType(Types.STRING);
     } else if (item.t === 'm') {
-        type = new ConcreteType(Types.ARRAY, getInnerArrayType(item.v));
+        if (!Array.isArray(item.v)) return invalidFormatError;
+        let innerType;
+        try {
+            innerType = getInnerArrayType(item.v);
+        } catch {
+            return invalidFormatError;
+        }
+        type = new ConcreteType(Types.ARRAY, innerType);
     } else if (item.t === 'l') {
+        if (!Array.isArray(item.v)) return invalidFormatError;
         const refTypes = [];
         for (const ref of item.v) {
             const node = analyzeScoped(definitions, ref, context);
@@ -114,6 +151,8 @@ export function analyzeScoped (definitions, id, context) {
         if (union.isConcrete) type = new ConcreteType(Type.ARRAY, union.types[0]);
         else type = new ConcreteType(Types.ARRAY, union);
     } else if (item.t === 'c') {
+        if (typeof item.f !== 'string') return invalidFormatError;
+        if (!Array.isArray(item.a)) return invalidFormatError;
         const fnNode = analyzeScoped(definitions, item.f, context);
         if (!fnNode.valid) return fnNode;
         const argTypes = [];
@@ -126,8 +165,11 @@ export function analyzeScoped (definitions, id, context) {
         for (const t of argTypes) currentTy = currentTy.fnmap(t);
         type = currentTy;
     } else if (item.t === 'f') {
+        if (!Array.isArray(item.p)) return invalidFormatError;
+        if (typeof item.b !== 'object' || item.b === null) return invalidFormatError;
         const params = {};
         for (const p of item.p) {
+            if (typeof p !== 'string') return invalidFormatError;
             params[p] = { t: VM_FN_PARAM, type: new TopType() }; // TODO: type inference
         }
         const retNode = analyzeScoped({
@@ -178,6 +220,8 @@ function getInnerArrayType (value) {
                 const union = new UnionType(x.map(getInnerArrayType));
                 if (union.isConcrete) unionTypes.push(new ConcreteType(Types.ARRAY, union.types[0]));
                 else unionTypes.push(new ConcreteType(Types.ARRAY, union));
+            } else {
+                throw new Error('invalid type');
             }
         }
 
