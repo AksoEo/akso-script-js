@@ -6,6 +6,9 @@ export class TopType {
     eq (ty) {
         return ty.signature === this.signature;
     }
+    isInstance (ty) {
+        return true;
+    }
     fnmap () {
         return this;
     }
@@ -39,6 +42,12 @@ export class UnionType extends TopType {
             return sa > sb ? 1 : sa < sb ? -1 : 0;
         });
     }
+    isInstance (ty) {
+        for (const t of this.types) {
+            if (t.isInstance(ty)) return true;
+        }
+        return false;
+    }
     get isConcrete () {
         return this.types.length === 1;
     }
@@ -48,7 +57,7 @@ export class UnionType extends TopType {
 }
 /// A concrete type.
 ///
-/// `param` and `ret` may be null, strings (for type variables), or types.
+/// `param` and `ret` may be null, or types.
 export class ConcreteType extends TopType {
     constructor (type, param = null, ret = null) {
         super();
@@ -66,10 +75,13 @@ export class ConcreteType extends TopType {
     }
     fnmap (ty) {
         if (this.type === ConcreteType.types.FUNC) {
-            if (!this.param.eq(ty)) return new TopType(); // UB
+            if (!this.param.isInstance(ty)) return new TopType(); // UB
             else return this.return;
         }
         return this.type;
+    }
+    isInstance (ty) {
+        return ty.eq(this);
     }
 }
 

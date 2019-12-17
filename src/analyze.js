@@ -1,7 +1,7 @@
 import { TopType, UnionType, ConcreteType, stdlibTypes } from './types';
 
 export const Errors = {
-    LEADING_AT_IDENT: 'leading @',
+    LEADING_AT_IDENT: 'leading @ in identifier',
     NOT_IN_SCOPE: 'definition not in scope',
     UNKNOWN_DEF_TYPE: 'unknown definition type',
 };
@@ -9,7 +9,7 @@ export const Errors = {
 const Types = ConcreteType.types;
 const VM_FN_PARAM = Symbol('fn-param');
 
-function buildContext () {
+function buildContext (formValues) {
     const cache = new WeakMap();
     const stdDefs = {};
     for (const k in stdlibTypes) {
@@ -17,19 +17,34 @@ function buildContext () {
         cache.set(def, { valid: true, type: stdlibTypes[k] });
         stdDefs[k] = def;
     }
-    return [stdDefs, { cache, path: [], locks: new WeakMap() }];
+    const getFormValueType = id => typeof formValues === 'function'
+        ? formValues(id)
+        : formValues[id];
+    return [stdDefs, { cache, path: [], locks: new WeakMap(), getFormValueType }];
 }
 
-/// Analyzes the given definitions.
-export function analyze (definitions, id) {
-    const [stdDefs, context] = buildContext();
+/// Analyzes the given definitions. Returns an object with a `valid` key.
+/// If the result is valid, will also have a `type` key, else an `error` key.
+///
+/// # Parameters
+/// - definitions: definitions object
+/// - id: name of the definition to analyze
+/// - formValues: one of the following:
+///   - an object mapping form values to their types. If a referenced form value is not in
+///     this object, it will be considered not in scope.
+///   - a function that maps ids to their types, or null.
+export function analyze (definitions, id, formValues) {
+    const [stdDefs, context] = buildContext(formValues);
     const defs = { ...stdDefs, ...definitions };
     return analyzeScoped(defs, id, context);
 }
 
-/// Analyzes all of the given definitions.
-export function analyzeAll (definitions, id) {
-    const [stdDefs, context] = buildContext();
+/// Analyzes all of the given definitions. Returns an object of results keyed by definition name.
+///
+/// # Parameters
+// See `analyze(...)`
+export function analyzeAll (definitions, id, formValues) {
+    const [stdDefs, context] = buildContext(formValues);
     const data = {};
     const defs = { ...stdDefs, ...definitions };
     for (const k in definitions) data[k] = analyzeScoped(defs, id, context);
@@ -45,13 +60,8 @@ export function analyzeAll (definitions, id) {
 /// - context: object of { cache: WeakMap, path: string[] }
 export function analyzeScoped (definitions, id, context) {
     if (id.startsWith('@')) {
-        return {
-            valid: false,
-            error: {
-                type: Errors.LEADING_AT_IDENT,
-                path: context.path.concat([id]),
-            },
-        };
+        const ty = context.getFormValueType(id);
+        if (ty) return { valid: true, type: ty };
     }
 
     const item = definitions[id];
@@ -64,6 +74,16 @@ export function analyzeScoped (definitions, id, context) {
             },
         };
     };
+
+    if (id.startsWith('@')) {
+        return {
+            valid: false,
+            error: {
+                type: Errors.LEADING_AT_IDENT,
+                path: context.path.concat([id]),
+            },
+        };
+    }
 
     // return cached if it exists
     if (context.cache.has(item)) return context.cache.get(item);

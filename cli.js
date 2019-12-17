@@ -9,7 +9,15 @@ process.stdin.resume();
 process.stdin.on('end', () => {
     const defs = JSON.parse(input);
     for (const k in defs) {
-        const out = doAnalyze ? analyze(defs, k) : evaluate(defs, k);
-        console.log(k, '->', out);
+        if (doAnalyze) {
+            const analysis = analyze(defs, k, {});
+            if (!analysis.valid) {
+                console.log(k, ':: invalid', analysis.error);
+            } else {
+                console.log(k, '::', analysis.type.signature);
+            }
+        } else {
+            console.log(k, '->', evaluate(defs, k, () => null));
+        }
     }
 });

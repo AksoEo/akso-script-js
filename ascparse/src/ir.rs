@@ -165,7 +165,9 @@ impl<'a> CompileContext<'a> {
     }
 
     fn resolve(&self, id: String) -> Result<Id, CompileError> {
-        if self.names.borrow().contains(&id) {
+        if id.starts_with('@') {
+            Ok(id)
+        } else if self.names.borrow().contains(&id) {
             Ok(id)
         } else {
             self.parent
