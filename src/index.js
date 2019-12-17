@@ -2,6 +2,17 @@ const stdlib = require('./stdlib');
 
 const VM_FN_PARAM = Symbol('fn-param');
 const NOT_EVALUATED = Symbol('?');
+const NOT_CACHED = Symbol();
+
+function getCached (caches, key) {
+    for (let i = caches.length - 1; i >= 0; i--) {
+        if (caches[i].has(key)) return caches[i].get(key);
+    }
+    return NOT_CACHED;
+}
+function insertCached (caches, key, value) {
+    caches[caches.length - 1].set(key, value);
+}
 
 function evaluateScoped (definitions, id, context) {
     if (context.shouldHalt()) throw new Error('Terminated by shouldHalt');
@@ -17,6 +28,10 @@ function evaluateScoped (definitions, id, context) {
             // this is a form variable
             value = context.getFormValue(item.f.substr(1));
         } else {
+            // see if we have it cached
+            const cached = getCached(context.caches, item);
+            if (cached !== NOT_CACHED) return cached;
+
             // resolve it from definitions otherwise
             value = evaluateScoped(definitions, item.f, context);
         }
@@ -41,10 +56,15 @@ function evaluateScoped (definitions, id, context) {
         }
 
         if (context.debug > 1) console.debug(item.f, debugArgs, '->', value);
+        insertCached(context.caches, item, value);
 
         return value;
     } else if (item.t === 'f') {
         // define a function
+
+        // see if we have it cached
+        const cached = getCached(context.caches, item);
+        if (cached !== NOT_CACHED) return cached;
 
         // define an inner function that contains the body
         let f = (params) => {
@@ -53,7 +73,11 @@ function evaluateScoped (definitions, id, context) {
                 ...item.b, // function body
                 ...params, // and the parameters
             };
-            return evaluateScoped(functionScope, '=', context);
+            const functionContext = {
+                ...context,
+                caches: context.caches.concat([new WeakMap()]),
+            };
+            return evaluateScoped(functionScope, '=', functionContext);
         };
 
         if (item.p.length === 0) {
@@ -77,11 +101,20 @@ function evaluateScoped (definitions, id, context) {
             return c(newParams, index + 1);
         };
 
-        // return c with initial state
-        return c({}, 0);
+        // create c with initial state; this is the final function
+        const value = c({}, 0);
+        insertCached(context.caches, item, value);
+
+        return value;
     } else if (item.t === 'l') {
         // construct a list
-        return item.v.map(name => evaluateScoped(definitions, name, context));
+        const cached = getCached(context.caches, item);
+        if (cached !== NOT_CACHED) return cached;
+
+        const value = item.v.map(name => evaluateScoped(definitions, name, context));
+
+        insertCached(context.caches, item, value);
+        return value;
     } else if (item.t === 'n' || item.t === 'm' || item.t === 's' || item.t === 'b') {
         // constant types
         return item.v;
@@ -121,6 +154,7 @@ function evaluate (definitions, id, getFormValue, options = {}) {
         getFormValue,
         debug: options.debug,
         shouldHalt: options.shouldHalt || (() => false),
+        caches: [new WeakMap()],
     };
     return evaluateScoped({ ...stdlib, ...definitions }, id, context);
 }
