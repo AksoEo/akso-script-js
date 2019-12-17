@@ -125,7 +125,7 @@ export function analyzeScoped (definitions, id, context) {
         if (typeof item.v !== 'boolean') return invalidFormatError;
         type = new ConcreteType(Types.BOOL);
     } else if (item.t === 'n') {
-        if (typeof item.v !== 'number') return invalidFormatError;
+        if (typeof item.v !== 'number' || !Number.isFinite(item.v)) return invalidFormatError;
         type = new ConcreteType(Types.NUMBER);
     } else if (item.t === 's') {
         if (typeof item.v !== 'string') return invalidFormatError;
@@ -152,11 +152,11 @@ export function analyzeScoped (definitions, id, context) {
         else type = new ConcreteType(Types.ARRAY, union);
     } else if (item.t === 'c') {
         if (typeof item.f !== 'string') return invalidFormatError;
-        if (!Array.isArray(item.a)) return invalidFormatError;
+        if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
         const fnNode = analyzeScoped(definitions, item.f, context);
         if (!fnNode.valid) return fnNode;
         const argTypes = [];
-        for (const arg of item.a) {
+        for (const arg of (item.a || [])) {
             const node = analyzeScoped(definitions, arg, context);
             if (!node.valid) return node;
             argTypes.push(node.type);
