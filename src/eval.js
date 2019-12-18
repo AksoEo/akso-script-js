@@ -62,12 +62,14 @@ export function evaluateScoped (definitions, id, context) {
             value = evaluateScoped(definitions, item.f, context);
         }
 
-        const debugArgs = item.a.map(() => NOT_EVALUATED);
+        const args = item.a || [];
+
+        const debugArgs = args.map(() => NOT_EVALUATED);
 
         // apply arguments
-        for (let i = 0; i < item.a.length; i++) {
+        for (let i = 0; i < args.length; i++) {
             if (typeof value === 'function') {
-                const argumentName = item.a[i];
+                const argumentName = args[i];
                 const index = i;
                 value = value(() => {
                     const v = evaluateScoped(definitions, argumentName, context)
