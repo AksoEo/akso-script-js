@@ -162,7 +162,7 @@ export function analyzeScoped (definitions, id, context) {
             if (!node.valid) return node;
             refTypes.push(node.type);
         }
-        type = union(refTypes);
+        type = array(union(refTypes));
     } else if (item.t === 'c') {
         if (typeof item.f !== 'string') return invalidFormatError;
         if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
