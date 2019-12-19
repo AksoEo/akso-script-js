@@ -16,7 +16,12 @@ function buildContext (formValues) {
     const stdDefs = {};
     for (const k in stdlibTypes) {
         const def = {};
-        cache.set(def, { valid: true, type: stdlibTypes[k] });
+        cache.set(def, {
+            valid: true,
+            type: stdlibTypes[k],
+            defTypes: new Set(),
+            stdUsage: new Set([k]),
+        });
         stdDefs[k] = def;
     }
     const getFormValueType = id => typeof formValues === 'function'
@@ -133,20 +138,34 @@ export function analyzeScoped (definitions, id, context) {
     context.locks.set(item, { unresolved: null });
 
     let type;
+    const defTypes = new Set();
+    const stdUsage = new Set();
+
+    const addDefTypes = list => {
+        for (const item of list) defTypes.add(item);
+    };
+    const addStdUsage = list => {
+        for (const item of list) stdUsage.add(item);
+    };
 
     if (item.t === 'u') {
         type = NULL;
+        defTypes.add('u');
     } else if (item.t === 'b') {
         if (typeof item.v !== 'boolean') return invalidFormatError;
         type = BOOL;
+        defTypes.add('b');
     } else if (item.t === 'n') {
         if (typeof item.v !== 'number' || !Number.isFinite(item.v)) return invalidFormatError;
         type = NUMBER;
+        defTypes.add('n');
     } else if (item.t === 's') {
         if (typeof item.v !== 'string') return invalidFormatError;
         type = STRING;
+        defTypes.add('s');
     } else if (item.t === 'm') {
         if (!Array.isArray(item.v)) return invalidFormatError;
+        defTypes.add('m');
         let innerType;
         try {
             innerType = getInnerArrayType(item.v);
@@ -156,22 +175,30 @@ export function analyzeScoped (definitions, id, context) {
         type = array(innerType);
     } else if (item.t === 'l') {
         if (!Array.isArray(item.v)) return invalidFormatError;
+        defTypes.add('l');
         const refTypes = [];
         for (const ref of item.v) {
             const node = analyzeScoped(definitions, ref, context);
             if (!node.valid) return node;
+            addDefTypes(node.defTypes);
+            addStdUsage(node.stdUsage);
             refTypes.push(node.type);
         }
         type = array(union(refTypes));
     } else if (item.t === 'c') {
         if (typeof item.f !== 'string') return invalidFormatError;
         if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
+        defTypes.add('c');
         const fnNode = analyzeScoped(definitions, item.f, context);
         if (!fnNode.valid) return fnNode;
+        addDefTypes(fnNode.defTypes);
+        addStdUsage(fnNode.stdUsage);
         const argTypes = [];
         for (const arg of (item.a || [])) {
             const node = analyzeScoped(definitions, arg, context);
             if (!node.valid) return node;
+            addDefTypes(node.defTypes);
+            addStdUsage(node.stdUsage);
             argTypes.push(node.type);
         }
         let currentTy = fnNode.type;
@@ -180,6 +207,7 @@ export function analyzeScoped (definitions, id, context) {
     } else if (item.t === 'f') {
         if (!Array.isArray(item.p)) return invalidFormatError;
         if (typeof item.b !== 'object' || item.b === null) return invalidFormatError;
+        defTypes.add('f');
         const params = {};
         for (const p of item.p) {
             if (typeof p !== 'string') return invalidFormatError;
@@ -195,6 +223,8 @@ export function analyzeScoped (definitions, id, context) {
         });
 
         if (!retNode.valid) return retNode;
+        addDefTypes(retNode.defTypes);
+        addStdUsage(retNode.stdUsage);
 
         type = retNode.type;
         for (const p in params) type = new FuncType(params[p].type, type);
@@ -216,6 +246,8 @@ export function analyzeScoped (definitions, id, context) {
     const value = {
         valid: true,
         type: reduce(type),
+        defTypes,
+        stdUsage,
     };
     context.cache.set(item, value);
     const lock = context.locks.get(item);

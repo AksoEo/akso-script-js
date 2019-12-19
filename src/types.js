@@ -480,6 +480,6 @@ export const stdlibTypes = {
     time_now: N,
     datetime_fmt: createFnType([[N, S], [0, U]]),
     if: createFnType([[B, 1, 2, b => union([b(1), b(2)])], [0, 1, 2, 2]]),
-    format_currency: createFnType([[S, N, union([S, U])], [0, 1, U]]),
+    currency_fmt: createFnType([[S, N, union([S, U])], [0, 1, U]]),
     id: createFnType([[0, 0]]),
 };

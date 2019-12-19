@@ -15,6 +15,8 @@ process.stdin.on('end', () => {
                 console.log(k, ':: invalid', analysis.error);
             } else {
                 console.log(k, '::', signature(analysis.type));
+                console.log(k, 'used types:', analysis.defTypes);
+                console.log(k, 'used stdlib items:', analysis.stdUsage);
             }
         } else {
             console.log(k, '->', evaluate(defs, k, () => null));

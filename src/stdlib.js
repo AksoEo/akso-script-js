@@ -378,7 +378,7 @@ export default {
     },
 
     if: a => b => c => a() === true ? b() : c(),
-    format_currency: a => b => {
+    currency_fmt: a => b => {
         const da = a();
         if (!(da in currencies)) return null;
         const db = b();
