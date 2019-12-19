@@ -1,4 +1,4 @@
-import { TopType, UnionType, ConcreteType, stdlibTypes } from './types';
+import { signature, NEVER, NULL, BOOL, NUMBER, STRING, union, array, apply, reduce, TypeVar, CondType, FuncType, UnresolvedType, stdlibTypes } from './types';
 
 // TODO: detect non-primitive recursion
 
@@ -9,7 +9,6 @@ export const Errors = {
     INVALID_FORMAT: 'invalid format',
 };
 
-const Types = ConcreteType.types;
 const VM_FN_PARAM = Symbol('fn-param');
 
 function buildContext (formValues) {
@@ -23,7 +22,16 @@ function buildContext (formValues) {
     const getFormValueType = id => typeof formValues === 'function'
         ? formValues(id)
         : formValues[id];
-    return [stdDefs, { cache, path: [], locks: new WeakMap(), getFormValueType }];
+    return [
+        stdDefs,
+        {
+            cache,
+            path: [],
+            locks: new WeakMap(),
+            unresolved: new Set(),
+            getFormValueType,
+        },
+    ];
 }
 
 /// Analyzes the given definitions. Returns an object with a `valid` key.
@@ -114,22 +122,29 @@ export function analyzeScoped (definitions, id, context) {
     // return cached if it exists
     if (context.cache.has(item)) return context.cache.get(item);
 
-    if (context.locks.has(item)) return { valid: true, type: new TopType() };
-    context.locks.set(item, 1);
+    if (context.locks.has(item)) {
+        const lock = context.locks.get(item);
+        if (!lock.unresolved) {
+            lock.unresolved = new UnresolvedType(item);
+            context.unresolved.add(lock.unresolved);
+        }
+        return { valid: true, type: lock.unresolved };
+    }
+    context.locks.set(item, { unresolved: null });
 
-    let type = new TopType();
+    let type;
 
     if (item.t === 'u') {
-        type = new ConcreteType(Types.NULL);
+        type = NULL;
     } else if (item.t === 'b') {
         if (typeof item.v !== 'boolean') return invalidFormatError;
-        type = new ConcreteType(Types.BOOL);
+        type = BOOL;
     } else if (item.t === 'n') {
         if (typeof item.v !== 'number' || !Number.isFinite(item.v)) return invalidFormatError;
-        type = new ConcreteType(Types.NUMBER);
+        type = NUMBER;
     } else if (item.t === 's') {
         if (typeof item.v !== 'string') return invalidFormatError;
-        type = new ConcreteType(Types.STRING);
+        type = STRING;
     } else if (item.t === 'm') {
         if (!Array.isArray(item.v)) return invalidFormatError;
         let innerType;
@@ -138,7 +153,7 @@ export function analyzeScoped (definitions, id, context) {
         } catch {
             return invalidFormatError;
         }
-        type = new ConcreteType(Types.ARRAY, innerType);
+        type = array(innerType);
     } else if (item.t === 'l') {
         if (!Array.isArray(item.v)) return invalidFormatError;
         const refTypes = [];
@@ -147,9 +162,7 @@ export function analyzeScoped (definitions, id, context) {
             if (!node.valid) return node;
             refTypes.push(node.type);
         }
-        const union = new UnionType(refTypes);
-        if (union.isConcrete) type = new ConcreteType(Type.ARRAY, union.types[0]);
-        else type = new ConcreteType(Types.ARRAY, union);
+        type = union(refTypes);
     } else if (item.t === 'c') {
         if (typeof item.f !== 'string') return invalidFormatError;
         if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
@@ -162,7 +175,7 @@ export function analyzeScoped (definitions, id, context) {
             argTypes.push(node.type);
         }
         let currentTy = fnNode.type;
-        for (const t of argTypes) currentTy = currentTy.fnmap(t);
+        for (const t of argTypes) currentTy = apply(currentTy, t);
         type = currentTy;
     } else if (item.t === 'f') {
         if (!Array.isArray(item.p)) return invalidFormatError;
@@ -170,7 +183,7 @@ export function analyzeScoped (definitions, id, context) {
         const params = {};
         for (const p of item.p) {
             if (typeof p !== 'string') return invalidFormatError;
-            params[p] = { t: VM_FN_PARAM, type: new TopType() }; // TODO: type inference
+            params[p] = { t: VM_FN_PARAM, type: new TypeVar() };
         }
         const retNode = analyzeScoped({
             ...definitions,
@@ -180,11 +193,13 @@ export function analyzeScoped (definitions, id, context) {
             ...context,
             path: context.path.concat([id]),
         });
+
         if (!retNode.valid) return retNode;
+
         type = retNode.type;
-        for (const p in params) {
-            type = new ConcreteType(Types.FUNC, params[p].type, type);
-        }
+        for (const p in params) type = new FuncType(params[p].type, type);
+
+        // TODO: try resolve unresolved types
     } else if (item.t === VM_FN_PARAM) {
         type = item.type;
     } else {
@@ -200,9 +215,13 @@ export function analyzeScoped (definitions, id, context) {
 
     const value = {
         valid: true,
-        type,
+        type: reduce(type),
     };
     context.cache.set(item, value);
+    const lock = context.locks.get(item);
+    if (lock.unresolved) {
+        // TODO: resolve type
+    }
     context.locks.delete(item);
     return value;
 }
@@ -212,22 +231,16 @@ function getInnerArrayType (value) {
         const unionTypes = [];
         for (const x of value) {
             const t = typeof x;
-            if (x === null) unionTypes.push(new ConcreteType(Types.NULL));
-            else if (t === 'boolean') unionTypes.push(new ConcreteType(Types.BOOL));
-            else if (t === 'number') unionTypes.push(new ConcreteType(Types.NUMBER));
-            else if (t === 'string') unionTypes.push(new ConcreteType(Types.STRING));
-            else if (Array.isArray(x)) {
-                const union = new UnionType(x.map(getInnerArrayType));
-                if (union.isConcrete) unionTypes.push(new ConcreteType(Types.ARRAY, union.types[0]));
-                else unionTypes.push(new ConcreteType(Types.ARRAY, union));
-            } else {
-                throw new Error('invalid type');
-            }
+            if (x === null) unionTypes.push(NULL);
+            else if (t === 'boolean') unionTypes.push(BOOL);
+            else if (t === 'number') unionTypes.push(NUMBER);
+            else if (t === 'string') unionTypes.push(STRING);
+            else if (Array.isArray(x)) unionTypes.push(array(union(x.map(getInnerArrayType))));
+            else throw new Error('invalid type in array');
         }
 
-        const union = new UnionType(unionTypes);
-        if (union.isConcrete) return union.types[0];
-        else return union;
+        return union(unionTypes);
     }
-    return new TopType();
+
+    return new TypeVar();
 }

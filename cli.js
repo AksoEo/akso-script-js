@@ -1,4 +1,4 @@
-const { evaluate, analyze } = require('.');
+const { evaluate, analyze, signature } = require('.');
 
 const doAnalyze = process.argv.includes('analyze');
 
@@ -14,7 +14,7 @@ process.stdin.on('end', () => {
             if (!analysis.valid) {
                 console.log(k, ':: invalid', analysis.error);
             } else {
-                console.log(k, '::', analysis.type.signature);
+                console.log(k, '::', signature(analysis.type));
             }
         } else {
             console.log(k, '->', evaluate(defs, k, () => null));
