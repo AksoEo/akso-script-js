@@ -1,4 +1,4 @@
-const stdlib = require('../src/stdlib');
+const { stdlib } = require('..');
 const { assertEq } = require('./util');
 
 function call (f, ...args) {

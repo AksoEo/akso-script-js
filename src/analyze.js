@@ -133,7 +133,7 @@ export function analyzeScoped (definitions, id, context) {
             lock.unresolved = new UnresolvedType(item);
             context.unresolved.add(lock.unresolved);
         }
-        return { valid: true, type: lock.unresolved };
+        return { valid: true, type: lock.unresolved, defTypes: new Set(), stdUsage: new Set() };
     }
     context.locks.set(item, { unresolved: null });
 
@@ -228,8 +228,6 @@ export function analyzeScoped (definitions, id, context) {
 
         type = retNode.type;
         for (const p in params) type = new FuncType(params[p].type, type);
-
-        // TODO: try resolve unresolved types
     } else if (item.t === VM_FN_PARAM) {
         type = item.type;
     } else {

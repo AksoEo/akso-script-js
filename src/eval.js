@@ -1,4 +1,4 @@
-import stdlib from './stdlib';
+import { stdlib } from './stdlib';
 
 /// Evaluates a definition.
 ///
@@ -16,6 +16,11 @@ import stdlib from './stdlib';
 ///       be fast to compute. Halting this way will throw an error.
 ///
 /// This function will throw if it encounters unknown definitions.
+///
+/// NOTE: to use country_fmt and phone_fmt, also load akso-script/country_fmt and
+/// akso-script/phone_fmt. The stdlib functions will always return null otherwise.
+///
+/// Browser-compatible variant: use loadCountryFmt/loadPhoneFmt from this module.
 export function evaluate (definitions, id, getFormValue, options = {}) {
     const context = {
         getFormValue,

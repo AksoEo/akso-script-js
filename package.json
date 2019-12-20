@@ -1,12 +1,14 @@
 {
   "name": "@tejo/akso-script",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "",
   "main": "dist/index",
   "module": "dist-esm/index",
   "files": [
     "dist",
-    "dist-esm"
+    "dist-esm",
+    "country_fmt.js",
+    "phone_fmt.js"
   ],
   "scripts": {
     "test": "node test",
@@ -23,6 +25,7 @@
     "rollup-plugin-babel": "^4.3.3"
   },
   "dependencies": {
-    "core-js": "^3.5.0"
+    "core-js": "^3.5.0",
+    "google-libphonenumber": "^3.2.6"
   }
 }

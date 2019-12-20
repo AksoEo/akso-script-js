@@ -111,6 +111,11 @@ function catImpl (a) {
     }
 }
 
+export const stdlibExt = {
+    getCountryName: null,
+    libphonenumber: null,
+};
+
 const ZERO = Symbol('std::0');
 const MIN_INNER_LAMBDA = Symbol('std::min_inner_lambda');
 const MAX_INNER_LAMBDA = Symbol('std::max_inner_lambda');
@@ -199,7 +204,7 @@ const extras = {
     },
 };
 
-export default {
+export const stdlib = {
     '+': defBinMath((a, b) => a + b),
     '-': defBinMath((a, b) => a - b),
     '*': defBinMath((a, b) => a * b),
@@ -384,6 +389,25 @@ export default {
         const db = b();
         if (typeof db !== 'number') return null;
         return (db / currencies[da]).toLocaleString('eo-EO', { style: 'currency', currency: da });
+    },
+    country_fmt: a => {
+        const da = a();
+        if (typeof da !== 'string') return null;
+        if (!da.match(/^[a-z]{2}$/i)) return null;
+        if (!stdlibExt.getCountryName) return null;
+        return stdlibExt.getCountryName(da);
+    },
+    phone_fmt: a => {
+        const da = a();
+        if (typeof da !== 'string') return null;
+        if (!stdlibExt.libphonenumber) return null;
+        try {
+            const phoneUtil = stdlibExt.libphonenumber.PhoneNumberUtil.getInstance();
+            const number = phoneUtil.parse(da);
+            return phoneUtil.format(number, stdlibExt.libphonenumber.PhoneNumberFormat.INTERNATIONAL);
+        } catch {
+            return null;
+        }
     },
     id: a => a(),
 

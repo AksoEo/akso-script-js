@@ -17,6 +17,7 @@ export function signature (type) {
 
 /// Apply a type to another type.
 export function apply (recv, arg) {
+    if (recv === NEVER) return NEVER;
     if (typeof recv === 'symbol') return new AppliedType(recv, arg, SECRET);
     return recv.apply(arg);
 }
@@ -115,6 +116,25 @@ export class UnionType {
         }));
     }
     match (ty) {
+        if (ty instanceof UnionType) {
+            // FIXME: very inefficient
+            const unionTypes = new Set(ty.signatures.values());
+            const matches = [];
+            for (const t of this.signatures.values()) {
+                let matched, matchedType;
+                for (const u of unionTypes) {
+                    if (matched = match(t, u)) {
+                        matchedType = u;
+                    }
+                }
+                if (matched) {
+                    matches.push(matched);
+                    unionTypes.delete(matchedType);
+                } else return null;
+            }
+            return mergeMaps(matches);
+        }
+        // TODO: what happens here?
         return null;
     }
 }
@@ -228,34 +248,36 @@ export class CondType {
     }
     reduce () {
         const newMapping = [];
-        let canDoTautology = true;
+        let canReturnTautology = true;
 
         for (const item of this.mapping) {
-            const newPre = item.pre.map(p => ({ var: reduce(p.var), match: reduce(p.match) }));
+            let newPre = item.pre.map(p => ({ var: reduce(p.var), match: reduce(p.match) }));
             const newType = reduce(item.type);
 
-            let isTautology = canDoTautology;
+            let isTautology = true;
+            let nextCanReturnTautology = true;
             let tautType = newType;
-            if (canDoTautology) {
-                for (const p of newPre) {
-                    if (this.mapping.length > 1 && !isConcrete(p.var)) {
-                        canDoTautology = isTautology = false;
-                        break;
-                    }
-                    const m = match(p.match, p.var);
-                    if (!m) {
-                        isTautology = false;
-                        break;
-                    }
-                    for (const [k, v] of m) {
-                        tautType = subst(tautType, k, v);
-                    }
+            for (const p of newPre) {
+                if (this.mapping.length > 1 && !isConcrete(p.var)) {
+                    nextCanReturnTautology = false;
+                }
+                const m = match(p.match, p.var);
+                if (!m) {
+                    isTautology = false;
+                    break;
+                }
+                for (const [k, v] of m) {
+                    tautType = subst(tautType, k, v);
                 }
             }
 
-            if (isTautology) {
+            if (canReturnTautology && isTautology) {
                 return tautType;
+            } else if (isTautology) {
+                const t = new TypeVar();
+                newPre = [{ var: t, match: t }];
             }
+            canReturnTautology = nextCanReturnTautology;
 
             if (newType instanceof CondType) {
                 for (const item of newType.mapping) {
@@ -343,7 +365,9 @@ export class FuncType {
     }
     match (ty) {
         if (ty instanceof FuncType) {
-            return match(subst(this.body, this.binding, ty.binding), ty.body);
+            const m = match(subst(this.body, this.binding, ty.binding), ty.body);
+            if (m) m.set(this.binding, ty.binding);
+            return m;
         }
         return null;
     }
@@ -357,6 +381,9 @@ export class UnresolvedType extends TypeVar {
     }
     get signature () {
         return '?' + this.name;
+    }
+    match (ty) {
+        return ty === this ? new Map() : null;
     }
 }
 
@@ -409,12 +436,15 @@ const mapType = createFnType([
     // FIXME: needs scoped vars bc map . map will break
     [mapFnType, array(mapBinding), array(apply(mapFnType, mapBinding))],
     [createFnType([[S, S]]), S, S],
+    [0, array(mapBinding), b => apply(b(0), mapBinding)],
+    [0, S, b => apply(b(0), S)],
     [0, 1, b => apply(b(0), b(1))],
 ]);
 const foldType = createFnType([
     // 0 == 2 == 3 in most cases but it doesn’t actually matter for the return type
     [mapFnType, 1, array(mapBinding), b => apply(apply(mapFnType, union([mapBinding, b(1)])), mapBinding)],
     [createFnType([[S, S]]), S, S, S],
+    [0, 1, array(mapBinding), b => apply(apply(b(0), union([mapBinding, b(1)])), mapBinding)],
     [0, 1, 2, b => apply(apply(b(0), b(1)), b(2))],
 ]);
 
@@ -481,5 +511,7 @@ export const stdlibTypes = {
     datetime_fmt: createFnType([[N, S], [0, U]]),
     if: createFnType([[B, 1, 2, b => union([b(1), b(2)])], [0, 1, 2, 2]]),
     currency_fmt: createFnType([[S, N, union([S, U])], [0, 1, U]]),
+    country_fmt: createFnType([[S, union([S, U])], [0, U]]),
+    phone_fmt: createFnType([[S, union([S, U])], [0, U]]),
     id: createFnType([[0, 0]]),
 };

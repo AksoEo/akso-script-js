@@ -1,4 +1,6 @@
 const { evaluate, analyze, signature } = require('.');
+require('./phone_fmt');
+require('./country_fmt');
 
 const doAnalyze = process.argv.includes('analyze');
 

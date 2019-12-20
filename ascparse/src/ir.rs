@@ -97,7 +97,9 @@ const STDLIB_NAMES: &[&str] = &[
     "time_now",
     "datetime_fmt",
     "if",
-    "format_currency",
+    "currency_fmt",
+    "country_fmt",
+    "phone_fmt",
     "id",
 ];
 
