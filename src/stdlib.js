@@ -113,6 +113,7 @@ function catImpl (a) {
 
 export const stdlibExt = {
     getCountryName: null,
+    formatCurrency: null,
     libphonenumber: null,
 };
 
@@ -388,7 +389,14 @@ export const stdlib = {
         if (!(da in currencies)) return null;
         const db = b();
         if (typeof db !== 'number') return null;
-        return (db / currencies[da]).toLocaleString('eo-EO', { style: 'currency', currency: da });
+        const number = db / currencies[da];
+        if (stdlibExt.formatCurrency) return stdlibExt.formatCurrency(da, db, number);
+        return number.toLocaleString('fr-FR', {
+            style: 'currency',
+            currency: da,
+            currencyDisplay: 'code',
+            minimumFractionDigits: 2,
+        });
     },
     country_fmt: a => {
         const da = a();

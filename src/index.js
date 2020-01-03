@@ -1,5 +1,5 @@
 export { evaluate, evaluateScoped } from './eval';
-export { analyze, analyzeAll, analyzeScoped } from './analyze';
+export { analyze, analyzeAll, analyzeScoped, Errors } from './analyze';
 export { stdlib, stdlibExt } from './stdlib';
 export {
     NEVER,
