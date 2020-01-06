@@ -71,7 +71,6 @@ export function analyzeAll (definitions, formValues) {
 }
 
 /// Analyzes the given definitions.
-/// Assumes they are in a valid format.
 ///
 /// # Parameters
 /// - definitions: definitions object
@@ -88,7 +87,7 @@ export function analyzeScoped (definitions, id, context) {
 
     if (typeof id === 'string' && id.startsWith('@')) {
         const ty = context.getFormValueType(id.substr(1));
-        if (ty) return { valid: true, type: ty };
+        if (ty) return { valid: true, type: ty, defTypes: new Set(), stdUsage: new Set() };
     }
 
     const item = definitions[id];
