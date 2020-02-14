@@ -48,6 +48,11 @@ function insertCached (caches, key, value) {
 export function evaluateScoped (definitions, id, context) {
     if (context.shouldHalt()) throw new Error('Terminated by shouldHalt');
 
+    if (id.startsWith('@')) {
+        // this is a form variable
+        return context.getFormValue(id.substr(1));
+    }
+
     const item = definitions[id];
     if (!item) throw new Error(`Unknown definition ${id}`);
 
@@ -55,10 +60,7 @@ export function evaluateScoped (definitions, id, context) {
         // call a declaration
 
         let value;
-        if (item.f.startsWith('@')) {
-            // this is a form variable
-            value = context.getFormValue(item.f.substr(1));
-        } else {
+        {
             // see if we have it cached
             const cached = getCached(context.caches, item);
             if (cached !== NOT_CACHED) return cached;
