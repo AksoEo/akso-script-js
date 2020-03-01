@@ -1,10 +1,26 @@
+/// The never type. An empty set.
+/// This type indicates that the definition which has this type will never return a value, such as
+/// by getting stuck in an infinite loop.
+/// For correct programs, this type will most likely appear in a union with other types as a return
+/// type of a function to indicate that a function *might* not halt.
 export const NEVER = Symbol('⊥');
+/// The null type. Has a single value: null itself.
 export const NULL = Symbol('null');
+/// The boolean type. Has two values: true and false.
 export const BOOL = Symbol('bool');
+/// The number type. Represents a finite Javascript number and must not be NaN, Infinity, or
+/// -Infinity.
 export const NUMBER = Symbol('num');
+/// The string type. Can be any sort of Javascript string.
 export const STRING = Symbol('str');
+/// The array type. This should not be used directly but should instead be considered an irreducible
+/// type function. Apply a type to this to indicate an actual array (such as apply(ARRAY, NUMBER)),
+/// or just use the array(…) convenience function.
 export const ARRAY = Symbol('array');
 
+/// Converts a type to a string, deterministically. Can be used for comparison of identical types.
+///
+/// (However, types may still be equal since they can be reduced)
 export function signature (type) {
     if (type === NEVER) return '!';
     else if (type === NULL) return '()';
@@ -15,7 +31,7 @@ export function signature (type) {
     else return type.signature;
 }
 
-/// Apply a type to another type.
+/// Applies a type to another type. May create a reducible type.
 export function apply (recv, arg) {
     if (recv === NEVER) return NEVER;
     if (typeof recv === 'symbol') return new AppliedType(recv, arg, SECRET);
@@ -46,9 +62,13 @@ export function isConcrete (type) {
     return type.isConcrete;
 }
 
+/// Merges multiple Maps by key. Will pick one of the available options if keys overlap.
 const mergeMaps = maps => new Map(maps.flatMap(map => [...map]));
 
-/// Creates a union of types.
+/// Creates a union of types, with two exceptions:
+///
+/// - a union of zero types is the never type.
+/// - a union of one type is the one type itself and won’t be put into a UnionType wrapper
 ///
 /// # Parameters
 /// - types: an array of types
@@ -139,8 +159,8 @@ export class UnionType {
     }
 }
 
-/// A type variable.
 let typeVarCounter = 0;
+/// A type variable.
 export class TypeVar {
     constructor () {
         this.name = '';
@@ -448,6 +468,7 @@ const foldType = createFnType([
     [0, 1, 2, b => apply(apply(b(0), b(1)), b(2))],
 ]);
 
+/// The types of standard library functions.
 export const stdlibTypes = {
     '+': binaryMathOp,
     '-': binaryMathOp,
