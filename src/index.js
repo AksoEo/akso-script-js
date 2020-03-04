@@ -13,6 +13,8 @@ export {
     subst,
     reduce,
     isConcrete,
+    resolve,
+    doesHalt,
     union,
     array,
     UnionType,

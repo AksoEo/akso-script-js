@@ -1,4 +1,4 @@
-const { evaluate, analyze, signature } = require('.');
+const { evaluate, analyze, signature, isConcrete, doesHalt } = require('.');
 require('./phone_fmt');
 require('./country_fmt');
 
@@ -17,6 +17,14 @@ process.stdin.on('end', () => {
                 console.log(k, ':: invalid', analysis.error);
             } else {
                 console.log(k, '::', signature(analysis.type));
+
+                let attrs = [];
+                if (isConcrete(analysis.type)) attrs.push('concrete');
+                const halts = doesHalt(analysis.type);
+                if (halts === true) attrs.push('halts');
+                else if (halts === null) attrs.push('halts?');
+
+                console.log(k, 'type attrs:', attrs.join(', '));
                 console.log(k, 'used types:', analysis.defTypes);
                 console.log(k, 'used stdlib items:', analysis.stdUsage);
             }

@@ -62,6 +62,23 @@ export function isConcrete (type) {
     return type.isConcrete;
 }
 
+/// Resolves all instances of the given unresolved type with the given partially resolved type.
+export function resolve (type, unresolved, resolved) {
+    // inner resolved type where the unresolved type is replaced with NEVER
+    const innerResolved = reduce(subst(resolved, unresolved, NEVER));
+    // return new type where the unresolved items are replaced with the inner resolved type
+    return reduce(subst(type, unresolved, innerResolved));
+}
+
+/// Returns true if an expression of the given type will always halt.
+/// Returns false if an expression of the given type will never halt.
+/// Returns null if it *might* halt.
+export function doesHalt (type) {
+    if (type === NEVER) return false;
+    if (typeof type === 'symbol') return true;
+    return type.doesHalt;
+}
+
 /// Merges multiple Maps by key. Will pick one of the available options if keys overlap.
 const mergeMaps = maps => new Map(maps.flatMap(map => [...map]));
 
@@ -123,6 +140,13 @@ export class UnionType {
     get isConcrete () {
         return [...this.signatures.values()].map(isConcrete).reduce((a, b) => a && b, true);
     }
+    get doesHalt () {
+        return [...this.signatures.values()].map(doesHalt).reduce((a, b) => {
+            if (b === false) return null;
+            if (a === null || b === null) return null;
+            return true;
+        }, true);
+    }
     subst (k, v) {
         return union([...this.signatures.values()].map(x => subst(x, k, v)));
     }
@@ -176,6 +200,9 @@ export class TypeVar {
     get isConcrete () {
         return false;
     }
+    get doesHalt () {
+        return null;
+    }
     subst (k, v) {
         return k === this ? v : this;
     }
@@ -201,6 +228,13 @@ export class AppliedType {
     }
     get isConcrete () {
         return isConcrete(this.recv) && isConcrete(this.arg);
+    }
+    get doesHalt () {
+        const a = doesHalt(this.recv);
+        const b = doesHalt(this.arg);
+        if (a === false || b === false) return false;
+        if (a === null || b === null) return null;
+        return true;
     }
     subst (k, v) {
         return apply(subst(this.recv, k, v), subst(this.arg, k, v));
@@ -245,6 +279,21 @@ export class CondType {
             if (!isConcrete(item.type)) return false;
         }
         return true;
+    }
+    get doesHalt () {
+        const itemHalts = [];
+        for (const item of this.mapping) {
+            for (const p of item.pre) {
+                itemHalts.push(doesHalt(p.var));
+                itemHalts.push(doesHalt(p.match));
+            }
+            itemHalts.push(doesHalt(item.type));
+        }
+        return itemHalts.reduce((a, b) => {
+            if (b === false) return null;
+            if (a === null || b === null) return null;
+            return true;
+        }, true);
     }
     subst (k, v) {
         const newMapping = [];
@@ -373,6 +422,9 @@ export class FuncType {
     }
     get isConcrete () {
         return isConcrete(subst(this.body, this.binding, NEVER));
+    }
+    get doesHalt () {
+        return doesHalt(this.body);
     }
     subst (k, v) {
         return new FuncType(this.binding, subst(this.body, k, v));

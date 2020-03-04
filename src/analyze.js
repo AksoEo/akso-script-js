@@ -1,6 +1,21 @@
-import { signature, NEVER, NULL, BOOL, NUMBER, STRING, union, array, apply, reduce, TypeVar, CondType, FuncType, UnresolvedType, stdlibTypes } from './types';
-
-// TODO: detect non-primitive recursion
+import {
+    signature,
+    NEVER,
+    NULL,
+    BOOL,
+    NUMBER,
+    STRING,
+    union,
+    array,
+    apply,
+    reduce,
+    resolve,
+    TypeVar,
+    CondType,
+    FuncType,
+    UnresolvedType,
+    stdlibTypes,
+} from './types';
 
 /// Possible errors returned by an analyze function.
 export const Errors = {
@@ -49,6 +64,8 @@ function buildContext (formValues) {
             locks: new WeakMap(),
             // a list of UnresolvedType instances
             unresolved: new Set(),
+            // a map from UnresolvedType to partially resolved types that will replace them
+            resolveMap: new Map(),
             // a function that returns the type of a form variable
             getFormValueType,
         },
@@ -71,7 +88,14 @@ function buildContext (formValues) {
 export function analyze (definitions, id, formValues) {
     const [stdDefs, context] = buildContext(formValues);
     const defs = { ...stdDefs, ...definitions };
-    return analyzeScoped(defs, id, context);
+    const item = analyzeScoped(defs, id, context);
+    if (item.type) {
+        // resolve unresolved types
+        for (const [k, v] of context.resolveMap) {
+            item.type = resolve(item.type, k, v);
+        }
+    }
+    return item;
 }
 
 /// Analyzes all of the given definitions. Returns an object of results keyed by definition name.
@@ -83,6 +107,15 @@ export function analyzeAll (definitions, formValues) {
     const data = {};
     const defs = { ...stdDefs, ...definitions };
     for (const k in definitions) data[k] = analyzeScoped(defs, k, context);
+    // resolve unresolved types
+    for (const k in data) {
+        const item = data[k];
+        if (item.type) {
+            for (const [k, v] of context.resolveMap) {
+                item.type = resolve(item.type, k, v);
+            }
+        }
+    }
     return data;
 }
 
@@ -278,7 +311,7 @@ export function analyzeScoped (definitions, id, context) {
     context.cache.set(item, value);
     const lock = context.locks.get(item);
     if (lock.unresolved) {
-        // TODO: resolve type
+        context.resolveMap.set(lock.unresolved, value.type);
     }
     context.locks.delete(item);
     return value;
