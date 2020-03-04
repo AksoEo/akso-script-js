@@ -48,7 +48,7 @@ function insertCached (caches, key, value) {
 export function evaluateScoped (definitions, id, context) {
     if (context.shouldHalt()) throw new Error('Terminated by shouldHalt');
 
-    if (id.startsWith('@')) {
+    if (typeof id === 'string' && id.startsWith('@')) {
         // this is a form variable
         return context.getFormValue(id.substr(1));
     }
