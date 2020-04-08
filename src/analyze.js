@@ -274,8 +274,17 @@ export function analyzeScoped (definitions, id, context) {
             if (typeof p !== 'string') return invalidFormatError;
             params[p] = { t: VM_FN_PARAM, type: new TypeVar() };
         }
+
+        // only allow definitions that do not start with an _ to be referenced in the child scope
+        const allowedParentScopeDefs = {};
+        for (const n in definitions) {
+            if (typeof n === 'symbol' || !n.startsWith('_')) {
+                allowedParentScopeDefs[n] = definitions[n];
+            }
+        }
+
         const retNode = analyzeScoped({
-            ...definitions,
+            ...allowedParentScopeDefs,
             ...params,
             ...item.b,
         }, '=', {
