@@ -390,12 +390,13 @@ export const stdlib = {
         const db = b();
         if (typeof db !== 'number') return null;
         const number = db / currencies[da];
+        const minFractionDigits = Math.floor(Math.log10(currencies[da]));
         if (stdlibExt.formatCurrency) return stdlibExt.formatCurrency(da, db, number);
         return number.toLocaleString('fr-FR', {
             style: 'currency',
             currency: da,
             currencyDisplay: 'code',
-            minimumFractionDigits: 2,
+            minimumFractionDigits: minFractionDigits,
         });
     },
     country_fmt: a => {
