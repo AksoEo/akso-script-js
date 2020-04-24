@@ -25,6 +25,7 @@ Expr: Expr = {
         }
         expr
     },
+    "if" <c:Expr> "then" <t:Expr> "else" <e:Expr> => Expr::If(Box::new(c), Box::new(t), Box::new(e)),
     // function application
     <e:ApplySubExpr> <o:Op> <a:Expr> => fix_expr_prec(Expr::Apply(Box::new(e), Op::Infix(o), Box::new(a))),
     <e:ApplySubExpr> <i:InfixIdent> <a:Expr> => fix_expr_prec(Expr::Apply(Box::new(e), Op::Infix(i), Box::new(a))),

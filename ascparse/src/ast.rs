@@ -33,6 +33,7 @@ pub enum Expr {
     Bool(bool),
     Null,
     Lambda(Box<Lambda>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone)]

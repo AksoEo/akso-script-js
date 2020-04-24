@@ -51,6 +51,19 @@ pub enum Def {
         #[serde(rename = "b")]
         body: Defs,
     },
+    #[serde(rename = "w")]
+    Switch {
+        #[serde(rename = "m")]
+        cases: Vec<SwitchCase>,
+    },
+}
+
+#[derive(Serialize)]
+pub struct SwitchCase {
+    #[serde(rename = "c")]
+    cond: Option<Id>,
+    #[serde(rename = "v")]
+    value: Id,
 }
 
 const STDLIB_NAMES: &[&str] = &[
@@ -84,6 +97,8 @@ const STDLIB_NAMES: &[&str] = &[
     "index",
     "length",
     "contains",
+    "head",
+    "tail",
     "sum",
     "min",
     "max",
@@ -96,7 +111,6 @@ const STDLIB_NAMES: &[&str] = &[
     "date_fmt",
     "time_now",
     "datetime_fmt",
-    "if",
     "currency_fmt",
     "country_fmt",
     "phone_fmt",
@@ -323,6 +337,28 @@ fn compile_expr<'a>(
                     },
                 );
             }
+        }
+        Expr::If(c, t, e) => {
+            let mut cases = Vec::new();
+            let cond_out = ctx.next_priv("");
+            let then_out = ctx.next_priv("");
+            let else_out = ctx.next_priv("");
+
+            defs.extend(compile_expr(cond_out.clone(), *c, ctx)?);
+            defs.extend(compile_expr(then_out.clone(), *t, ctx)?);
+            defs.extend(compile_expr(else_out.clone(), *e, ctx)?);
+
+            cases.push(SwitchCase {
+                cond: Some(cond_out),
+                value: then_out,
+            });
+
+            cases.push(SwitchCase {
+                cond: None,
+                value: else_out,
+            });
+
+            defs.insert(out, Def::Switch { cases });
         }
         Expr::Number(n) => {
             defs.insert(out, Def::Number { value: n });

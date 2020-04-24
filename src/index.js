@@ -15,6 +15,7 @@ export {
     isConcrete,
     resolve,
     doesHalt,
+    isValid,
     union,
     array,
     UnionType,
@@ -23,6 +24,7 @@ export {
     CondType,
     FuncType,
     UnresolvedType,
+    ErrorType,
     stdlibTypes,
 } from './types';
 

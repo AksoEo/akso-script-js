@@ -48,10 +48,10 @@ function eq (a, b) {
     } else return a === b;
 }
 
-/// “mapifies” a function so that it is guaranteed to be callable.
+/// “mapifies” a value so that it is guaranteed to be callable.
 /// also handles lazy parameters
-const mapify = f => typeof f === 'function' ? (a => f(() => a)) : (() => f);
-/// “flatmapifies” a function so that it is guaranteed to be callable and return an array
+const mapify = f => typeof f === 'function' ? f : ((_) => f);
+/// “flatmapifies” a value so that it is guaranteed to be callable and return an array
 const flatmapify = f => {
     const df = mapify(f);
     return a => {
@@ -61,15 +61,13 @@ const flatmapify = f => {
     };
 };
 
-/// Defines a binary operation taking two parameters which *will* be consumed
+/// Defines a binary operation taking two parameters
 function defBin (ty) {
     return function defBinInner (f, z = null) {
-        return a => b => {
-            const da = a();
-            const db = b();
-            if (typeof da !== ty) return z;
-            if (typeof db !== ty) return z;
-            return f(da, db);
+        return (a, b) => {
+            if (typeof a !== ty) return z;
+            if (typeof b !== ty) return z;
+            return f(a, b);
         };
     }
 }
@@ -77,38 +75,29 @@ const defBinMath = defBin('number');
 const defBinBin = defBin('boolean');
 
 function defCmp (f) {
-    return _a => _b => {
-        const a = _a();
-        const b = _b();
+    return (a, b) => {
         if (typeof a === 'string' && typeof b === 'string') return f(a > b ? 1 : a < b ? -1 : 0);
         if (typeof a === 'number' && typeof b === 'number') return f(a - b);
         return false;
     };
 }
 
-/// Defines a unary operation taking one parameter that *will* be consumed
+/// Defines a unary operation taking one parameter
 function defUn (f, ty, z = null) {
-    return a => {
-        a = a();
-        return typeof a === ty ? f(a) : z;
-    };
+    return a => typeof a === ty ? f(a) : z;
 }
 const defUnMath = f => defUn(f, 'number');
 
-function catImpl (a) {
-    if (!Array.isArray(a)) return a;
-    const isNotAllArrays = a.findIndex(x => !Array.isArray(x)) > -1;
-    if (isNotAllArrays) {
-        const isNotAllStrings = a.findIndex(x => typeof x !== 'string') > -1;
-        if (isNotAllStrings) {
-            // heterogenous cat
-            return a.join(',');
-        } else {
-            return a.join('');
-        }
-    } else {
-        return a.flatMap(a => a);
-    }
+function concatenate (a, b) {
+    if (typeof a === 'string' && typeof b === 'string') return a + b;
+    // turn it into arrays!
+    if (Array.isArray(a)) void 0;
+    else if (typeof a === 'string') a = a.split('');
+    else a = [a];
+    if (Array.isArray(b)) void 0;
+    else if (typeof b === 'string') b = b.split('');
+    else b = [b];
+    return a.concat(b);
 }
 
 export const stdlibExt = {
@@ -134,7 +123,7 @@ const extras = {
         p: ['a', 'b'],
         b: {
             c: { t: 'c', f: '<', a: ['a', 'b'] },
-            '=': { t: 'c', f: 'if', a: ['c', 'a', 'b'] },
+            '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
         },
     },
     min: {
@@ -148,7 +137,7 @@ const extras = {
         p: ['a', 'b'],
         b: {
             c: { t: 'c', f: '>', a: ['a', 'b'] },
-            '=': { t: 'c', f: 'if', a: ['c', 'a', 'b'] },
+            '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
         },
     },
     max: {
@@ -179,7 +168,7 @@ const extras = {
             _1: { t: 'n', v: 1 },
             _2: { t: 'n', v: 2 },
             // if (length is mod 2) (_ifmod2) (_else)
-            '=': { t: 'c', f: 'if', a: ['_ismod2', '_ifmod2', '_else'] },
+            '=': { t: 'w', m: [{ c: '_ismod2', v: '_ifmod2' }, { v: '_else' }] },
             // length of input
             _l: { t: 'c', f: 'length', a: ['a'] },
             // sorted input
@@ -224,8 +213,8 @@ export const stdlib = {
     sign: defUnMath(Math.sign),
     abs: defUnMath(Math.abs),
 
-    '==': a => b => eq(a(), b()),
-    '!=': a => b => !eq(a(), b()),
+    '==': (a, b) => eq(a, b),
+    '!=': (a, b) => !eq(a, b),
     '>': defCmp(a => a > 0),
     '<': defCmp(a => a < 0),
     '>=': defCmp(a => a >= 0),
@@ -235,93 +224,84 @@ export const stdlib = {
     not: defUn(a => !a, 'boolean', false),
     xor: defBinBin((a, b) => !!(a ^ b), false),
 
-    cat: a => catImpl(a()),
-    map: f => a => {
-        a = a();
+    cat: (a, b) => concatenate(a, b),
+    map: (f, a) => {
         if (a === null) return null;
         if (a[Symbol.iterator]) {
             // iterable type (string or array)
             const items = [...a];
             if (!items.length) return a;
-            const df = mapify(f());
+            const df = mapify(f);
             return items.map(df);
         }
         // not an iterable; just map directly
-        return mapify(f())(a);
+        return mapify(f)(a);
     },
-    flat_map: f => a => {
-        a = a();
+    flat_map: (f, a) => {
         if (a === null) return null;
         if (a[Symbol.iterator]) {
             const items = [...a];
             if (!items.length) return a;
-            const df = flatmapify(f());
+            const df = flatmapify(f);
             const mapped = items.map(df);
-            return catImpl(mapped);
+            return mapped.length
+                ? mapped.reduce(concatenate)
+                : typeof a === 'string' ? '' : [];
         }
-        const mapped = flatmapify(f())(a);
-        const isNotAllStrings = mapped.findIndex(a => typeof a !== 'string') > -1;
-        if (isNotAllStrings) return mapped;
-        else return mapped.join('');
+        const mapped = flatmapify(f)(a);
+        return mapped.length
+            ? mapped.reduce(concatenate)
+            : typeof a === 'string' ? '' : [];
     },
-    fold: f => r => a => {
-        a = a();
+    fold: (f, r, a) => {
         if (a === null) return null;
-        const df = mapify(f());
-        let ac = r();
+        const df = mapify(f);
+        let ac = r;
         if (a[Symbol.iterator]) {
-            for (const item of a) ac = mapify(df(ac))(item);
+            for (const item of a) ac = df(ac, item);
         } else {
-            mapify(df(ac))(a);
+            ac = df(ac, a);
         }
         return ac;
     },
-    fold1: f => a => {
-        a = a();
+    fold1: (f, a) => {
         if (a === null || !a[Symbol.iterator]) return null;
         const items = [...a];
         if (!items.length) return null;
+        const df = mapify(f);
         let ac = items[0];
-        const df = mapify(f());
-        for (let i = 1; i < items.length; i++) ac = mapify(df(ac))(items[i]);
+        for (let i = 1; i < items.length; i++) ac = df(ac, items[i]);
         return ac;
     },
-    filter: f => a => {
-        const da = a();
-        if (da === null || !da[Symbol.iterator]) return null;
-        const items = [...da];
-        if (!items.length) return da;
-        const df = mapify(f());
+    filter: (f, a) => {
+        if (a === null || !a[Symbol.iterator]) return null;
+        const items = [...a];
+        if (!items.length) return a;
+        const df = mapify(f);
         const filtered = items.filter(a => df(a) === true);
-        if (typeof da === 'string') {
+        if (typeof a === 'string') {
             // turn it back into a string
             return filtered.join('');
         }
         return filtered;
     },
-    index: a => b => {
-        const da = a();
-        if (typeof da !== 'string' && !Array.isArray(da) || !da.length) return null;
-        const db = b();
-        if (db === null || typeof db !== 'number' || (db | 0) !== db || db < 0 || db >= da.length) return null;
-        return da[db];
+    index: (a, b) => {
+        if (typeof a !== 'string' && !Array.isArray(a) || !a.length) return null;
+        if (b === null || typeof b !== 'number' || (b | 0) !== b || b < 0 || b >= a.length) return null;
+        return a[b];
     },
     length: a => {
-        const da = a();
-        if (typeof da !== 'string' && !Array.isArray(da)) return null;
-        return da.length;
+        if (typeof a !== 'string' && !Array.isArray(a)) return null;
+        return a.length;
     },
-    contains: a => b => {
-        const da = a();
-        if (typeof da === 'string') {
-            const db = b();
-            if (typeof db !== 'string') return false;
-            return da.includes(db);
-        } else if (Array.isArray(da)) {
-            if (!da.length) return false;
-            const db = b();
-            for (const item of da) {
-                if (eq(item, db)) return true;
+    contains: (a, b) => {
+        if (typeof a === 'string') {
+            if (typeof b !== 'string') return false;
+            return a.includes(b);
+        } else if (Array.isArray(a)) {
+            if (!a.length) return false;
+            for (const item of a) {
+                if (eq(item, b)) return true;
             }
             return false;
         }
@@ -329,47 +309,43 @@ export const stdlib = {
     },
 
     sort: a => {
-        const da = a();
-        if (da === null || !da[Symbol.iterator]) return null;
-        const items = [...da];
+        if (a === null || !a[Symbol.iterator]) return null;
+        const items = [...a];
         items.sort((a, b) => {
             if (typeof a === 'number' && typeof b === 'number') return a - b;
             if (typeof a === 'string' && typeof b === 'string') return a > b ? 1 : a < b ? -1 : 0;
             return 0;
         });
-        if (typeof da === 'string') return items.join('');
+        if (typeof a === 'string') return items.join('');
         return items;
     },
 
-    date_sub: t => a => b => {
-        const dt = t();
-        if (dt !== 'years' && dt !== 'months' && dt !== 'weeks' && dt !== 'days') return null;
-        const da = parseDateString(a());
-        const db = parseDateString(b());
+    date_sub: (t, a, b) => {
+        if (t !== 'years' && t !== 'months' && t !== 'weeks' && t !== 'days') return null;
+        const da = parseDateString(a);
+        const db = parseDateString(b);
         if (da === null || db === null) return null;
-        if (dt === 'years') return subMonths(da, db) / 12;
-        else if (dt === 'months') return subMonths(da, db);
-        else if (dt === 'weeks') return (da - db) / (1000 * 86400 * 7);
-        else if (dt === 'days') return (da - db) / (1000 * 86400);
+        if (t === 'years') return subMonths(da, db) / 12;
+        else if (t === 'months') return subMonths(da, db);
+        else if (t === 'weeks') return (da - db) / (1000 * 86400 * 7);
+        else if (t === 'days') return (da - db) / (1000 * 86400);
     },
-    date_add: t => a => b => {
-        const dt = t();
-        if (dt !== 'years' && dt !== 'months' && dt !== 'weeks' && dt !== 'days') return null;
-        const da = parseDateString(a());
+    date_add: (t, a, b) => {
+        if (t !== 'years' && t !== 'months' && t !== 'weeks' && t !== 'days') return null;
+        const da = parseDateString(a);
         if (da === null) return null;
-        const db = b();
-        if (typeof db !== 'number') return null;
-        if (dt === 'years') da.setFullYear(da.getFullYear() + db);
-        else if (dt === 'months') da.setMonth(da.getMonth() + db);
-        else if (dt === 'weeks') da.setDate(da.getDate() + db * 7);
-        else if (dt === 'days') da.setDate(da.getDate() + db);
+        if (typeof b !== 'number') return null;
+        if (t === 'years') da.setFullYear(da.getFullYear() + b);
+        else if (t === 'months') da.setMonth(da.getMonth() + b);
+        else if (t === 'weeks') da.setDate(da.getDate() + b * 7);
+        else if (t === 'days') da.setDate(da.getDate() + b);
         return dateToString(da);
     },
     get date_today () {
         return { t: 's', v: dateToString(new Date()) };
     },
     date_fmt: a => {
-        const da = parseDateString(a());
+        const da = parseDateString(a);
         if (da === null) return null;
         return formatDate(da);
     },
@@ -377,48 +353,42 @@ export const stdlib = {
         return { t: 'n', v: new Date() / 1000 };
     },
     datetime_fmt: a => {
-        const da = a();
-        if (typeof da !== 'number') return null;
-        const date = new Date(da * 1000);
+        if (typeof a !== 'number') return null;
+        const date = new Date(a * 1000);
         return formatDate(date) + ' ' + formatTime(date);
     },
 
-    if: a => b => c => a() === true ? b() : c(),
-    currency_fmt: a => b => {
-        const da = a();
-        if (!(da in currencies)) return null;
-        const db = b();
-        if (typeof db !== 'number') return null;
-        const number = db / currencies[da];
-        const minFractionDigits = Math.floor(Math.log10(currencies[da]));
-        if (stdlibExt.formatCurrency) return stdlibExt.formatCurrency(da, db, number);
+    currency_fmt: (a, b) => {
+        if (!(a in currencies)) return null;
+        if (typeof b !== 'number') return null;
+        const number = b / currencies[a];
+        const minFractionDigits = Math.floor(Math.log10(currencies[a]));
+        if (stdlibExt.formatCurrency) return stdlibExt.formatCurrency(a, b, number);
         return number.toLocaleString('fr-FR', {
             style: 'currency',
-            currency: da,
+            currency: a,
             currencyDisplay: 'code',
             minimumFractionDigits: minFractionDigits,
         });
     },
     country_fmt: a => {
-        const da = a();
-        if (typeof da !== 'string') return null;
-        if (!da.match(/^[a-z]{2}$/i)) return null;
+        if (typeof a !== 'string') return null;
+        if (!a.match(/^[a-z]{2}$/i)) return null;
         if (!stdlibExt.getCountryName) return null;
-        return stdlibExt.getCountryName(da);
+        return stdlibExt.getCountryName(a);
     },
     phone_fmt: a => {
-        const da = a();
-        if (typeof da !== 'string') return null;
+        if (typeof a !== 'string') return null;
         if (!stdlibExt.libphonenumber) return null;
         try {
             const phoneUtil = stdlibExt.libphonenumber.PhoneNumberUtil.getInstance();
-            const number = phoneUtil.parse(da);
+            const number = phoneUtil.parse(a);
             return phoneUtil.format(number, stdlibExt.libphonenumber.PhoneNumberFormat.INTERNATIONAL);
         } catch {
             return null;
         }
     },
-    id: a => a(),
+    id: a => a,
 
     ...extras,
 };

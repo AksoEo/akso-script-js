@@ -7,12 +7,12 @@ Note that `if` is not a language construct but just the `if` function.
 ```hs
 numbers = map (\x -> x + 1) [1, 2, 3, 4];
 
-fib a = if (a <= 0) 0 (
-    if (a <= 2) 1 (
+fib a = if a <= 0 then 0 else (
+    if a <= 2 then 1 else (
         fib (a - 1) + fib (a - 2)
     )
 );
-fact a = if (a < 0) null (if (a <= 1) 1 (a * fact (a - 1)));
+fact a = if a < 0 then null else (if a <= 1 then 1 else (a * fact (a - 1)));
 
 cats = map fib numbers;
 

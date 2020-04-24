@@ -10,6 +10,7 @@ import {
     apply,
     reduce,
     resolve,
+    isValid,
     TypeVar,
     CondType,
     FuncType,
@@ -28,6 +29,8 @@ export const Errors = {
     UNKNOWN_DEF_TYPE: 'unknown definition type',
     /// The data has an invalid format.
     INVALID_FORMAT: 'invalid format',
+    /// A type error; e.g. mismatch in argument count.
+    TYPE_ERROR: 'type error',
 };
 
 const VM_FN_PARAM = Symbol('fn-param');
@@ -247,7 +250,7 @@ export function analyzeScoped (definitions, id, context) {
         }
         type = array(union(refTypes));
     } else if (item.t === 'c') {
-        if (typeof item.f !== 'string') return invalidFormatError;
+        if (typeof item.f !== 'string' && typeof item.f !== 'symbol') return invalidFormatError;
         if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
         defTypes.add('c');
         const fnNode = analyzeScoped(definitions, item.f, context);
@@ -262,17 +265,18 @@ export function analyzeScoped (definitions, id, context) {
             addStdUsage(node.stdUsage);
             argTypes.push(node.type);
         }
-        let currentTy = fnNode.type;
-        for (const t of argTypes) currentTy = apply(currentTy, t);
-        type = currentTy;
+        type = apply(fnNode.type, argTypes);
     } else if (item.t === 'f') {
         if (!Array.isArray(item.p)) return invalidFormatError;
         if (typeof item.b !== 'object' || item.b === null) return invalidFormatError;
         defTypes.add('f');
+        const paramVars = [];
         const params = {};
         for (const p of item.p) {
             if (typeof p !== 'string') return invalidFormatError;
-            params[p] = { t: VM_FN_PARAM, type: new TypeVar() };
+            const pv = new TypeVar();
+            paramVars.push(pv);
+            params[p] = { t: VM_FN_PARAM, type: pv };
         }
 
         // only allow definitions that do not start with an _ to be referenced in the child scope
@@ -296,8 +300,24 @@ export function analyzeScoped (definitions, id, context) {
         addDefTypes(retNode.defTypes);
         addStdUsage(retNode.stdUsage);
 
-        type = retNode.type;
-        for (const p in params) type = new FuncType(params[p].type, type);
+        type = new FuncType(paramVars, retNode.type);
+    } else if (item.t === 'w') {
+        if (!Array.isArray(item.m)) return invalidFormatError;
+
+        const cases = [];
+
+        for (const xcase of item.m) {
+            if (typeof xcase !== 'object') return invalidFormatError;
+            if (typeof xcase.c === 'string' || typeof xcase.c === 'symbol') {
+                const condNode = analyzeScoped(definitions, xcase.c, context);
+                if (!condNode.valid) return condNode;
+            }
+            const valNode = analyzeScoped(definitions, xcase.v, context);
+            if (!valNode.valid) return valNode;
+            cases.push(valNode.type);
+        }
+
+        type = union(cases);
     } else if (item.t === VM_FN_PARAM) {
         type = item.type;
     } else {
@@ -305,6 +325,17 @@ export function analyzeScoped (definitions, id, context) {
             valid: false,
             error: {
                 type: Errors.UNKNOWN_DEF_TYPE,
+                path: context.path.concat([id]),
+                item,
+            },
+        };
+    }
+
+    if (!isValid(type)) {
+        return {
+            valid: false,
+            error: {
+                type: Errors.TYPE_ERROR,
                 path: context.path.concat([id]),
                 item,
             },
