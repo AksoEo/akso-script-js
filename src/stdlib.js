@@ -261,7 +261,7 @@ export const stdlib = nvmify({
             const items = [...a];
             if (!items.length) return a;
             const df = mapify(f);
-            return items.map(df);
+            return items.map(item => df(item));
         }
         // not an iterable; just map directly
         return mapify(f)(a);
@@ -272,7 +272,7 @@ export const stdlib = nvmify({
             const items = [...a];
             if (!items.length) return a;
             const df = flatmapify(f);
-            const mapped = items.map(df);
+            const mapped = items.map(item => df(item));
             return mapped.length
                 ? mapped.reduce(concatenate)
                 : typeof a === 'string' ? '' : [];
