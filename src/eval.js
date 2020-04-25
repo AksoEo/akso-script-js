@@ -1,4 +1,5 @@
 import { stdlib } from './stdlib';
+import { VMFun, VM_FN_PARAM } from './vmfun';
 
 /// Evaluates a definition.
 ///
@@ -43,26 +44,6 @@ function insertCached (caches, key, value) {
     caches[caches.length - 1].set(key, value);
 }
 
-class VMFun {
-    constructor (body, params) {
-        this.params = params;
-        this.body = body;
-    }
-    get length () {
-        return this.params.length;
-    }
-    apply (_, args) {
-        if (args.length !== this.params.length) {
-            throw new Error(`Function expected ${this.params.length} argument(s), got ${args.length} argument(s)`);
-        }
-        const params = {};
-        for (let i = 0; i < this.params.length; i++) {
-            params[this.params[i]] = args[i];
-        }
-        return this.body(params);
-    }
-}
-
 export function evaluateScoped (definitions, id, context) {
     if (context.shouldHalt()) throw new Error('Terminated by shouldHalt');
 
@@ -72,7 +53,7 @@ export function evaluateScoped (definitions, id, context) {
     }
 
     const item = definitions[id];
-    if (!item) throw new Error(`Unknown definition ${id}`);
+    if (!item) throw new Error(`Unknown definition ${id.toString()}`);
 
     if (item.t === 'c') {
         // call a declaration
@@ -90,7 +71,7 @@ export function evaluateScoped (definitions, id, context) {
         const args = item.a || [];
         let value;
 
-        if (typeof callee === 'function') {
+        if (typeof callee === 'function' || callee instanceof VMFun) {
             const expectedArgCount = callee.length;
             if (args.length !== expectedArgCount) throw new Error(`Incorrect number of arguments in ${id} (expected ${expectedArgCount})`);
 
@@ -124,7 +105,7 @@ export function evaluateScoped (definitions, id, context) {
             return evaluateScoped(functionScope, '=', functionContext);
         };
 
-        const value = new VMFun(f, item.p);
+        const value = new VMFun(f, item.p, id);
         insertCached(context.caches, item, value);
         return value;
     } else if (item.t === 'l') {
@@ -154,7 +135,9 @@ export function evaluateScoped (definitions, id, context) {
     } else if (item.t === 'u') {
         // null type
         return null;
-    } else if (typeof item === 'function') {
+    } else if (item.t === VM_FN_PARAM) {
+        return item.v;
+    } else if (item instanceof VMFun) {
         // stdlib function
         return item;
     } else {

@@ -1,3 +1,5 @@
+import { VMFun, NVMFun } from './vmfun';
+
 // Maps currencies to their smallest unit multiplier
 const currencies = {
     USD: 100,
@@ -50,7 +52,9 @@ function eq (a, b) {
 
 /// “mapifies” a value so that it is guaranteed to be callable.
 /// also handles lazy parameters
-const mapify = f => typeof f === 'function' ? f : ((_) => f);
+const mapify = f => (typeof f ===  'function' || f instanceof VMFun)
+    ? (...args) => f.apply(null, args)
+    : ((_) => f);
 /// “flatmapifies” a value so that it is guaranteed to be callable and return an array
 const flatmapify = f => {
     const df = mapify(f);
@@ -106,44 +110,59 @@ export const stdlibExt = {
     libphonenumber: null,
 };
 
-const ZERO = Symbol('std::0');
-const MIN_INNER_LAMBDA = Symbol('std::min_inner_lambda');
-const MAX_INNER_LAMBDA = Symbol('std::max_inner_lambda');
 const extras = {
-    [ZERO]: { t: 'n', v: 0 },
-    // sum = fold (+) 0
+    // sum a = fold (+) 0 a
     sum: {
-        t: 'c',
-        f: 'fold',
-        a: ['+', ZERO],
-    },
-    // min = fold1 (\a b -> if (a < b) a b)
-    [MIN_INNER_LAMBDA]: {
         t: 'f',
-        p: ['a', 'b'],
+        p: ['a'],
         b: {
-            c: { t: 'c', f: '<', a: ['a', 'b'] },
-            '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
-        },
+            _0: { t: 'n', v: 0 },
+            '=': {
+                t: 'c',
+                f: 'fold',
+                a: ['+', '_0', 'a'],
+            },
+        }
     },
+    // min a = fold1 (\a b -> if (a < b) a b) a
     min: {
-        t: 'c',
-        f: 'fold1',
-        a: [MIN_INNER_LAMBDA],
-    },
-    // max = fold1 (\a b -> if (a > b) a b)
-    [MAX_INNER_LAMBDA]: {
         t: 'f',
-        p: ['a', 'b'],
+        p: ['a'],
         b: {
-            c: { t: 'c', f: '>', a: ['a', 'b'] },
-            '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
+            'm': {
+                t: 'f',
+                p: ['a', 'b'],
+                b: {
+                    c: { t: 'c', f: '<', a: ['a', 'b'] },
+                    '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
+                },
+            },
+            '=': {
+                t: 'c',
+                f: 'fold1',
+                a: ['m', 'a'],
+            },
         },
     },
+    // max a = fold1 (\a b -> if (a > b) a b) a
     max: {
-        t: 'c',
-        f: 'fold1',
-        a: [MAX_INNER_LAMBDA],
+        t: 'f',
+        p: ['a'],
+        b: {
+            'm': {
+                t: 'f',
+                p: ['a', 'b'],
+                b: {
+                    c: { t: 'c', f: '>', a: ['a', 'b'] },
+                    '=': { t: 'w', m: [{ c: 'c', v: 'a' }, { v: 'b' }] },
+                },
+            },
+            '=': {
+                t: 'c',
+                f: 'fold1',
+                a: ['m', 'a'],
+            },
+        },
     },
     // avg a = (sum a) / (length a)
     avg: {
@@ -165,6 +184,7 @@ const extras = {
         t: 'f',
         p: ['a'],
         b: {
+            _0: { t: 'n', v: 0 },
             _1: { t: 'n', v: 1 },
             _2: { t: 'n', v: 2 },
             // if (length is mod 2) (_ifmod2) (_else)
@@ -174,7 +194,7 @@ const extras = {
             // sorted input
             _b: { t: 'c', f: 'sort', a: ['a'] },
             // length is mod 2?
-            _ismod2: { t: 'c', f: '==', a: ['_lmod2', ZERO] },
+            _ismod2: { t: 'c', f: '==', a: ['_lmod2', '_0'] },
             // length mod 2
             _lmod2: { t: 'c', f: 'mod', a: ['_l', '_2'] },
             // function that indexes sorted input
@@ -194,7 +214,16 @@ const extras = {
     },
 };
 
-export const stdlib = {
+const nvmify = a => {
+    const out = {};
+    for (const k in a) {
+        if (typeof a[k] === 'function') out[k] = new NVMFun(a[k], k);
+        else out[k] = a[k];
+    }
+    return out;
+};
+
+export const stdlib = nvmify({
     '+': defBinMath((a, b) => a + b),
     '-': defBinMath((a, b) => a - b),
     '*': defBinMath((a, b) => a * b),
@@ -307,6 +336,22 @@ export const stdlib = {
         }
         return false;
     },
+    head: (a, b) => {
+        if (a === null || !a[Symbol.iterator]) return null;
+        if (typeof b !== 'number') return null;
+        const items = [...a];
+        items.splice(b);
+        if (typeof a === 'string') return items.join('');
+        return items;
+    },
+    tail: (a, b) => {
+        if (a === null || !a[Symbol.iterator]) return null;
+        if (typeof b !== 'number') return null;
+        let items = [...a];
+        items = items.splice(b);
+        if (typeof a === 'string') return items.join('');
+        return items;
+    },
 
     sort: a => {
         if (a === null || !a[Symbol.iterator]) return null;
@@ -391,7 +436,7 @@ export const stdlib = {
     id: a => a,
 
     ...extras,
-};
+});
 
 function parseDateString (s) {
     if (typeof s !== 'string') return null;
@@ -400,7 +445,9 @@ function parseDateString (s) {
     return new Date(s);
 }
 
-const padz = (s, n) => (s + n).substr(-s.length);
+function padz (s, n) {
+    return (s + n).substr(-s.length);
+}
 function dateToString (d) {
     return padz('0000', d.getUTCFullYear()) + '-' + padz('00', d.getUTCMonth() + 1) + '-' + padz('00', d.getUTCDate());
 }

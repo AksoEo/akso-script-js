@@ -1,4 +1,4 @@
-const { stdlib } = require('..');
+const { stdlib, evaluate } = require('..');
 const { assertEq } = require('./util');
 
 function call (f, ...args) {
@@ -75,3 +75,4 @@ assertEq(call(stdlib.date_sub, 'months', '2019-05-01', '2019-01-03'), 4 - 2 / 31
 assertEq(call(stdlib.date_sub, 'cats', '2019-05-03', '2019-01-01'), null);
 assertEq(call(stdlib.date_add, 'years', '2019-01-01', 1), '2020-01-01');
 assertEq(call(stdlib.date_add, 'days', '2019-01-01', 3), '2019-01-04');
+assertEq(call(evaluate({}, 'sum'), [1, 2, 3, 4]), 10);

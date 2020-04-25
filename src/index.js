@@ -1,4 +1,5 @@
 export { evaluate, evaluateScoped } from './eval';
+export { VMFun } from './vmfun';
 export { analyze, analyzeAll, analyzeScoped, Errors } from './analyze';
 export { stdlib, stdlibExt } from './stdlib';
 export {
