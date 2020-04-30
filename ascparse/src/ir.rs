@@ -89,7 +89,7 @@ const STDLIB_NAMES: &[&str] = &[
     "or",
     "not",
     "xor",
-    "cat",
+    "++",
     "map",
     "flat_map",
     "fold",

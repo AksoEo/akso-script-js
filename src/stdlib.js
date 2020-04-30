@@ -253,7 +253,7 @@ export const stdlib = nvmify({
     not: defUn(a => !a, 'boolean', false),
     xor: defBinBin((a, b) => !!(a ^ b), false),
 
-    cat: (a, b) => concatenate(a, b),
+    '++': (a, b) => concatenate(a, b),
     map: (f, a) => {
         if (a === null) return null;
         if (a[Symbol.iterator]) {
