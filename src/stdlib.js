@@ -1,7 +1,7 @@
 import { VMFun, NVMFun } from './vmfun';
 
 // Maps currencies to their smallest unit multiplier
-const currencies = {
+export const currencies = {
     USD: 100,
     AUD: 100,
     CAD: 100,
