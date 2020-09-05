@@ -40,13 +40,13 @@ export function apply (recv, args) {
     return recv.apply(args);
 }
 
-/// Substitutes a type [variable] for another.
+/// Substitutes a type [variable] for another (alpha?).
 export function subst (type, key, value) {
     if (typeof type === 'symbol') return key === type ? value : type;
     return type.subst(key, value);
 }
 
-/// Reduces a type.
+/// Reduces a type (beta?).
 export function reduce (type) {
     if (typeof type === 'symbol') return type;
     return type.reduce();
@@ -60,8 +60,6 @@ function match (pattern, type) {
         // type outputs null. Then if we have a union of (string | number) as an argument, we want
         // it to still match the string case.
         // Hence, we need to match each union item individually.
-        // This would also be true for condtypes but god damn i am not writing that code today
-        // TODO: that ^
         const maps = [...type.signatures.values()].map(t => match(pattern, t)).filter(x => x);
         if (!maps.length) return null;
         return mergeMaps(maps);
@@ -179,34 +177,6 @@ export class UnionType {
             return [item];
         }));
     }
-    match (ty) {
-        if (ty instanceof UnionType) {
-            // FIXME: very inefficient
-            const unionTypes = new Set(ty.signatures.values());
-            const matches = [];
-            for (const t of this.signatures.values()) {
-                let matched, matchedType;
-                for (const u of unionTypes) {
-                    if (matched = match(t, u)) {
-                        matchedType = u;
-                    }
-                }
-                if (matched) {
-                    matches.push(matched);
-                    unionTypes.delete(matchedType);
-                } else return null;
-            }
-            return mergeMaps(matches);
-        }
-
-        for (const t of this.signatures.values()) {
-            const m = match(ty, t);
-            if (m) return m;
-        }
-
-        // TODO: what happens here?
-        return null;
-    }
 }
 
 let typeVarCounter = 0;
@@ -221,7 +191,7 @@ export class TypeVar {
         } while (remaining);
     }
     get signature () {
-        return '%' + this.name;
+        return '$' + this.name;
     }
     get isConcrete () {
         return false;
@@ -240,9 +210,6 @@ export class TypeVar {
     }
     reduce () {
         return this;
-    }
-    match (ty) {
-        return new Map([[this, ty]]);
     }
 }
 
@@ -270,7 +237,7 @@ export class AppliedType {
         return isValid(this.recv) && this.args.map(isValid).reduce((a, b) => a && b, true);
     }
     subst (k, v) {
-        return apply(subst(this.recv, k, v), this.args.map(arg => subst(arg, k, v)));
+        return new AppliedType(subst(this.recv, k, v), this.args.map(arg => subst(arg, k, v)), SECRET);
     }
     apply (tys) {
         return new AppliedType(this, tys, SECRET);
@@ -280,292 +247,171 @@ export class AppliedType {
         const recv = reduce(this.recv);
         return apply(recv, args);
     }
-    match (ty) {
-        if (ty instanceof AppliedType) {
-            const recvMatch = match(this.recv, ty.recv);
-            if (ty.args.length !== this.args.length) return null;
-            const argMatches = this.args.map((x, i) => match(x, ty.args[i]));
-            for (const m of argMatches) {
-                if (!m) return null;
-            }
-            return mergeMaps(argMatches.concat([recvMatch]));
-        }
-        return null;
-    }
 }
 
-/// Branching types; like a union type but with conditions.
-///
-/// - mapping: { pre: Predicate[], type: Type }[]
-///   where Predicate is { var: TypeVar, match: Type }
-export class CondType {
-    constructor (mapping) {
-        if (!Array.isArray(mapping)) throw new Error('not a valid mapping');
-        this.mapping = mapping;
+/// The type of a function.
+export class FuncType {
+    constructor (mappings) {
+        if (!Array.isArray(mappings)) throw new Error('mappings must be an array');
+        if (!mappings.length) throw new Error('Function can’t have zero mappings')
+        const arity = mappings[0].arity;
+        for (const mapping of mappings) {
+            if (mapping.arity !== arity) throw new Error('Function can’t have mappings with different arity');
+        }
+        this.mappings = mappings;
+    }
+    get arity () {
+        return this.mappings[0].arity;
     }
     get signature () {
-        return '{ ' + this.mapping.map(({ pre, type }) =>
-            pre.map(pre => signature(pre.var) + ': ' + signature(pre.match)).join(' ∧ ')
-                + ' -> ' + signature(type)).join(', ') + ' }';
+        return 'f(' + this.mappings.map(m => m.signature).join(',') + ')';
     }
     get isConcrete () {
-        for (const item of this.mapping) {
-            for (const p of item.pre) {
-                if (!isConcrete(p.var) || !isConcrete(p.match)) return false;
-            }
-            if (!isConcrete(item.type)) return false;
+        for (const mapping of this.mappings) {
+            if (!mapping.isConcrete) return false;
+            if (mapping.isTautology) break;
         }
         return true;
     }
     get doesHalt () {
-        const itemHalts = [];
-        for (const item of this.mapping) {
-            for (const p of item.pre) {
-                itemHalts.push(doesHalt(p.var));
-                itemHalts.push(doesHalt(p.match));
-            }
-            itemHalts.push(doesHalt(item.type));
+        for (const mapping of this.mappings) {
+            if (!mapping.doesHalt) return false;
+            if (mapping.isTautology) break;
         }
-        return itemHalts.reduce((a, b) => {
-            if (b === false) return null;
-            if (a === null || b === null) return null;
-            return true;
-        }, true);
+        return true;
     }
     get isValid () {
-        for (const item of this.mapping) {
-            for (const p of item.pre) {
-                if (!isValid(p.var)) return false;
-                if (!isValid(p.match)) return false;
-            }
-            if (!isValid(item.type)) return false;
+        for (const mapping of this.mappings) {
+            if (!mapping.isValid) return false;
+            if (mapping.isTautology) break;
         }
         return true;
     }
     subst (k, v) {
-        const newMapping = [];
-        for (const item of this.mapping) {
-            newMapping.push({
-                pre: item.pre.map(p => ({ var: subst(p.var, k, v), match: subst(p.match, k, v) })),
-                type: subst(item.type, k, v),
-            });
-        }
-        return new CondType(newMapping);
+        // substitutions can't touch the function body, because:
+        // (1) type reductions will never need to use this since they will always apply beforehand
+        // (2) this would cause namespacing issues with type variables
+        return this;
     }
     apply (tys) {
-        const newMapping = [];
-        for (const item of this.mapping) {
-            newMapping.push({
-                pre: item.pre,
-                type: apply(item.type, tys),
-            });
+        // TODO: handle case where there's union type args
+        // (need to match each combination individually and union at the end)
+
+        // substitute bindings for the concrete values that were passed
+        for (const mapping of this.mappings) {
+            const applied = mapping.matchApply(tys);
+            if (applied) return reduce(reduce(applied)); // reducing twice gives better results
         }
-        return new CondType(newMapping);
+
+        // no applicable mapping could be found; the function is undefined at these inputs
+        return new ErrorType('undefined');
     }
     reduce () {
-        const newMapping = [];
-
-        outer:
-        for (const item of this.mapping) {
-            let reducedPre = item.pre.map(p => ({ var: reduce(p.var), match: reduce(p.match) }));
-            let newType = reduce(item.type);
-            const outIsConcrete = isConcrete(newType);
-
-            let newPre = [];
-            let poison = false;
-
-            for (let i = 0; i < reducedPre.length; i++) {
-                const p = reducedPre[i];
-
-                if ((p.match instanceof TypeVar) && outIsConcrete) {
-                    // will match literally anything, and since we don’t need to bind it it doesn’t
-                    // matter
-                    if (!doesHalt(p.var)) {
-                        // make sure to still poison it, though
-                        poison = true;
-                    }
-                    continue;
-                }
-
-                if (!isConcrete(p.var)) {
-                    // this one has a type variable; keep the predicate
-                    newPre.push(p);
-                    continue;
-                }
-
-                const m = match(p.match, p.var);
-                if (!m) {
-                    // this is not a match and will never be true
-                    // we can safely ignore this mapping case
-                    continue outer;
-                } else {
-                    // always matches
-                    if (!doesHalt(p.var)) {
-                        // lhs does not necessarily halt; poison!
-                        poison = true;
-                    }
-                    // substitute type variables otherwise
-                    // since this is always a match we don’t really need to add it to the predicates
-                    // anymore
-                    for (const [k, v] of m) {
-                        newType = subst(newType, k, v);
-                    }
-                    // also substitute in remaining predicates because sometimes we might
-                    // bind a type variable in an earlier one
-                    for (let j = i; j < reducedPre.length; j++) {
-                        let { var: va, match } = reducedPre[j];
-                        for (const [k, v] of m) {
-                            va = subst(va, k, v);
-                            match = subst(match, k, v);
-                        }
-                        reducedPre[j] = { var: va, match };
-                    }
-                }
-            }
-
-            const maybePoison = t => poison ? union([t, NEVER]) : t;
-
-            if (newType instanceof CondType) {
-                // merge nested condtypes
-                for (const item of newType.mapping) {
-                    newMapping.push({
-                        pre: newPre.concat(item.pre),
-                        type: maybePoison(item.type),
-                    });
-                }
-            } else {
-                newMapping.push({ pre: newPre, type: maybePoison(newType) });
-            }
-
-            // if this was a tautology, then we can skip the rest
-            if (!newPre.length) break;
+        const newMappings = [];
+        for (const mapping of this.mappings) {
+            newMappings.push(mapping.reduce());
         }
-
-        if (newMapping.length === 0) return NEVER;
-        if (newMapping.length === 1 && !newMapping[0].pre.length) {
-            // there’s only one case that’s always true
-            // we can remove the condtype wrapper
-            return newMapping[0].type;
-        }
-
-        return new CondType(newMapping);
-    }
-    match (ty) {
-        if (ty instanceof CondType) {
-            // FIXME: very inefficient
-            const mappings = new Set(ty.mapping);
-            const outerMatches = [];
-            for (const item of this.mapping) {
-                let outerMatch, matchingMapping;
-                outer:
-                for (const j of mappings) {
-                    const tyMatch = match(item.type, j.type);
-                    if (!tyMatch) continue;
-
-                    const innerMatches = [tyMatch];
-                    const preds = new Set(j.pre);
-                    for (const p of item.pre) {
-                        let innerMatch, matchingQ;
-                        for (const q of preds) {
-                            const varMatch = match(p.var, q.var);
-                            const patMatch = match(p.match, q.match);
-                            if (varMatch && patMatch) {
-                                matchingQ = q;
-                                innerMatch = mergeMaps([varMatch, patMatch]);
-                                break;
-                            }
-                        }
-                        if (matchingQ) {
-                            preds.delete(matchingQ);
-                            innerMatches.push(innerMatch);
-                        } else continue outer;
-                    }
-                    matchingMapping = j;
-                    outerMatch = mergeMaps(innerMatches);
-                    break;
-                }
-
-                if (matchingMapping) {
-                    mappings.delete(matchingMapping);
-                    outerMatches.push(outerMatch);
-                } else return null;
-            }
-            return mergeMaps(outerMatches);
-        }
-        return null;
+        // TODO: flatten function in case a -> (fn) a by matching a against inner fn and extracting
+        // cases
+        return new FuncType(newMappings);
     }
 }
 
-/// The type of a function. Has a set of argument bindings.
-export class FuncType {
-    constructor (bindings, body) {
-        if (!Array.isArray(bindings)) throw new Error('bindings must be an array');
-        this.bindings = bindings;
-        this.body = body;
+/// A function pattern. Matches any function of the given arity and associates it with the given
+/// binding.
+export class FunctionPattern {
+    constructor (binding, arity) {
+        this.binding = binding;
+        this.arity = arity;
     }
     get signature () {
-        return 'λ(' + this.bindings.map(signature).join(',') + ' -> ' + signature(this.body) + ')';
+        return `${signature(this.binding)}:(${[...new Array(this.arity)].map(x => '·').join(',')})->·`;
+    }
+}
+
+/// Maps a pattern to a type. May bind type variables.
+///
+/// Patterns may be one of:
+/// - primitive types
+/// - apply(pattern, pattern)
+/// - a function pattern
+/// - a type variable binding
+///
+/// All variable bindings in patterns must be present in the bindings set.
+export class TypeMapping {
+    constructor (bindings, patterns, type) {
+        this.bindings = bindings;
+        this.patterns = patterns;
+        this.type = type;
+    }
+    get arity () {
+        return this.patterns.length;
+    }
+    get signature () {
+        return '(' + this.patterns.map(signature).join(',') + ')->' + signature(this.type);
+    }
+    get isTautology () {
+        for (const pat of this.patterns) {
+            if (!(pat instanceof TypeVar)) return false;
+        }
+        return true;
     }
     get isConcrete () {
-        let constBody = this.body;
+        let constBody = this.type;
         for (const b of this.bindings) constBody = subst(constBody, b, NEVER);
         return isConcrete(constBody);
     }
     get doesHalt () {
-        return doesHalt(this.body);
+        return doesHalt(this.type);
     }
     get isValid () {
-        return isValid(this.body);
+        return isValid(this.type);
     }
-    subst (k, v) {
-        for (const b of this.bindings) {
-            if (b instanceof TypeVar && signature(k) === signature(b)) {
-                // if the subst key is a type var, this usually means a function is being
-                // applied. In this case, we do *not* want to keep propagating the substitution
-                // into this function's body, because type variables inside the function body
-                // are in a different scope and shadow the parent scope variables.
-                // tldr: since bindings are, well, *new* bindings, we perform no substitutions if
-                // the key happens to be a binding.
-                return this;
+    matchApply (tys) {
+        if (tys.length !== this.patterns.length) return new ErrorType('argc');
+
+        // Bindings. Mapping our own type variables (found in this.bindings) to types from `tys`.
+        const bindings = new Map();
+        // Matches a type pattern.
+        const matchPattern = (pat, ty) => {
+            // concrete types can just be matched directly
+            if (typeof pat === 'symbol') return pat === ty;
+            else if (pat instanceof AppliedType) {
+                // applications must match their receiver and their arguments
+                if (!(ty instanceof AppliedType)) return false;
+                if (pat.args.length !== ty.args.length) return false;
+                matchPattern(pat.recv, ty.recv);
+                for (let i = 0; i < pat.args.length; i++) {
+                    matchPattern(pat.args[i], ty.args[i]);
+                }
+                return true;
+            } else if (pat instanceof FunctionPattern) {
+                // a function pattern matches any function of the same arity
+                if (!(ty instanceof FuncType)) return false;
+                if (pat.arity !== ty.arity) return false;
+                // it matched; so the function type can be bound
+                bindings.set(pat.binding, ty);
+                return true;
+            } else if (pat instanceof TypeVar) {
+                // a type variable matches anything
+                bindings.set(pat, ty);
+                return true;
             }
-        }
-        return new FuncType(this.bindings, subst(this.body, k, v));
-    }
-    apply (tys) {
-        if (tys.length !== this.bindings.length) {
-            return new ErrorType('argc');
+            // there are no other types of patterns
+            return false;
+        };
+
+        for (let i = 0; i < this.patterns.length; i++) {
+            if (!matchPattern(this.patterns[i], tys[i])) return null;
         }
 
-        // substitute bindings for the concrete values that were passed
-        let body = this.body;
-        for (let i = 0; i < this.bindings.length; i++) {
-            body = subst(body, this.bindings[i], tys[i]);
-        }
-        // reduce twice because it may be helpful
-        return reduce(reduce(body));
+        // all patterns matched!
+        let type = this.type;
+        for (const [k, v] of bindings) type = subst(type, k, v);
+        return type;
     }
     reduce () {
-        return new FuncType(this.bindings, reduce(this.body));
-    }
-    match (ty) {
-        if (ty instanceof FuncType) {
-            if (ty.bindings.length !== this.bindings.length) return null;
-            // try substituting our bindings for the other function's and seeing if it matches
-            let b = this.body;
-            for (let i = 0; i < ty.bindings.length; i++) {
-                b = subst(b, this.bindings[i], ty.bindings[i]);
-            }
-
-            const m = match(b, ty.body);
-            if (m) {
-                // encode substitutions if it matches
-                for (let i = 0; i < ty.bindings.length; i++) {
-                    m.set(this.bindings[i], ty.bindings[i]);
-                }
-            }
-            return m;
-        }
-        return null;
+        return new TypeMapping(this.bindings, this.patterns, reduce(this.type));
     }
 }
 
@@ -609,40 +455,52 @@ export class ErrorType {
     reduce () {
         return this;
     }
-    match (ty) {
-        return null;
-    }
 }
 
-const createPolyFn = mappings => {
-    const argc = mappings[0].length - 1;
-    const args = [];
-    for (let i = 0; i < argc; i++) args.push(new TypeVar());
+export function createPrimitiveType (name) {
+    return class {
+        get signature () {
+            return name;
+        }
+        get isConcrete () {
+            return true;
+        }
+        get doesHalt () {
+            return true;
+        }
+        get isValid () {
+            return true;
+        }
+        subst (k, v) {
+            return signature(k) === this.signature ? v : this;
+        }
+        apply (tys) {
+            return new AppliedType(this, tys, SECRET);
+        }
+        reduce () {
+            return this;
+        }
+    };
+}
 
-    let condMapping = [];
+export const Timestamp = createPrimitiveType('timestamp');
+
+const createPolyFn = mappings => {
+    const fnMappings = [];
     for (const m of mappings) {
         const margs = m.slice();
         const mret = margs.pop();
 
-        const predicates = [];
-        for (let i = 0; i < argc; i++) {
-            predicates.push({
-                var: args[i],
-                match: margs[i],
-            });
+        const bindings = [];
+        const args = [];
+        for (const marg of margs) {
+            if (marg instanceof TypeVar) bindings.push(marg);
+            args.push(marg);
         }
 
-        condMapping.push({
-            pre: predicates,
-            type: mret,
-        });
+        fnMappings.push(new TypeMapping(bindings, args, mret));
     }
-
-    if (condMapping.length === 1) {
-        return new FuncType(args, condMapping[0].type);
-    }
-
-    return new FuncType(args, new CondType(condMapping));
+    return new FuncType(fnMappings);
 };
 const withVar = a => {
     const v = new TypeVar();
@@ -759,7 +617,18 @@ export const stdlibTypes = {
     date_add: createPolyFn([[S, S, N, union([S, U])], [any(), any(), any(), U]]),
     date_today: S,
     date_fmt: createPolyFn([[S, union([S, U])], [any(), U]]),
-    time_now: N,
+    date_get: createPolyFn([[S, S, union([N, U])], [any(), any(), U]]),
+    date_set: createPolyFn([[S, S, N, union([S, U])], [any(), any(), any(), U]]),
+    ts_now: Timestamp,
+    tz_utc: N,
+    tz_local: N,
+    ts_from_unix: createPolyFn([[N, Timestamp], [any(), U]]),
+    ts_to_unix: createPolyFn([[Timestamp, N], [any(), U]]),
+    ts_from_date: createPolyFn([[S, N, N, N, N, union([Timestamp, U])], [any(), any(), any(), any(), any(), U]]),
+    ts_to_date: createPolyFn([[Timestamp, N, S], [any(), any(), U]]),
+    ts_parse: createPolyFn([[S, union([Timestamp, U])], [any(), U]]),
+    ts_to_string: createPolyFn([[Timestamp, S], [any(), U]]),
+    ts_fmt: createPolyFn([[Timestamp, S], [any(), U]]),
     datetime_fmt: createPolyFn([[N, S], [any(), U]]),
     currency_fmt: createPolyFn([[S, N, union([S, U])], [any(), any(), U]]),
     country_fmt: createPolyFn([[S, union([S, U])], [any(), U]]),

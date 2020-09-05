@@ -12,7 +12,6 @@ import {
     resolve,
     isValid,
     TypeVar,
-    CondType,
     FuncType,
     UnresolvedType,
     stdlibTypes,

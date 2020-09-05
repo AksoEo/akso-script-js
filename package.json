@@ -1,6 +1,6 @@
 {
   "name": "@tejo/akso-script",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "",
   "main": "dist/index",
   "module": "dist-esm/index",
@@ -19,13 +19,13 @@
   "repository": "git://github.com/AksoEo/akso-script-js.git",
   "license": "ISC",
   "devDependencies": {
-    "@babel/core": "^7.7.5",
-    "@babel/preset-env": "^7.7.6",
-    "rollup": "^1.27.13",
-    "rollup-plugin-babel": "^4.3.3"
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "rollup": "^1.32.1",
+    "rollup-plugin-babel": "^4.4.0"
   },
   "dependencies": {
-    "core-js": "^3.5.0",
-    "google-libphonenumber": "^3.2.6"
+    "core-js": "^3.6.5",
+    "google-libphonenumber": "^3.2.13"
   }
 }
