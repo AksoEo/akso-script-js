@@ -386,6 +386,23 @@ export const stdlib = nvmify({
         else if (t === 'days') da.setDate(da.getDate() + b);
         return dateToString(da);
     },
+    date_get: (t, a) => {
+        const da = parseDateString(a);
+        if (da === null) return null;
+        if (t === 'y') return da.getFullYear();
+        else if (t === 'M') return da.getMonth() + 1;
+        else if (t === 'd') return da.getDate();
+        return null;
+    },
+    date_set: (t, a, b) => {
+        if (t !== 'y' && t !== 'M' && t !== 'd') return null;
+        const da = parseDateString(a);
+        if (da === null) return null;
+        if (t === 'y') da.setFullYear(b);
+        else if (t === 'M') da.setMonth(b - 1);
+        else if (t === 'd') da.setDate(b);
+        return dateToString(da);
+    },
     get date_today () {
         return { t: 's', v: dateToString(new Date()) };
     },
@@ -394,13 +411,98 @@ export const stdlib = nvmify({
         if (da === null) return null;
         return formatDate(da);
     },
-    get time_now () {
-        return { t: 'n', v: new Date() / 1000 };
+    ts_now: () => {
+        return new Date();
     },
-    datetime_fmt: a => {
+    tz_utc: { t: 'n', v: 0 },
+    tz_local: () => new Date().getTimezoneOffset(),
+    ts_from_unix: (a) => {
         if (typeof a !== 'number') return null;
-        const date = new Date(a * 1000);
-        return formatDate(date) + ' ' + formatTime(date);
+        return new Date(Math.floor(a * 1000));
+    },
+    ts_to_unix: (a) => {
+        if (!a || !(a instanceof Date)) return null;
+        return Math.floor(a.getTime() / 1000);
+    },
+    ts_from_date: (a, tz, h, m, s) => {
+        if (typeof tz !== 'number' || typeof h !== 'number' || typeof m !== 'number' || typeof s !== 'number') return null;
+        if (parseDateString(a) === null) return null;
+
+        const da = new Date(`${a}T00:00:00${timezoneOffsetString(tz)}`);
+        da.setHours(da.getHours() + h);
+        da.setMinutes(da.getMinutes() + m);
+        da.setSeconds(da.getSeconds() + s);
+        return da;
+    },
+    ts_to_date: (a, tz) => {
+        if (!a || !(a instanceof Date) || typeof tz !== 'number') return null;
+        // add the time zone offset to a such that we're basically rotating the desired time zone
+        // to UTC
+        const da = new Date(+a + tz * 60000);
+        return da.toISOString().split('T')[0];
+    },
+    ts_parse: (a) => {
+        if (typeof a !== 'string') return null;
+        const da = new Date(a);
+        if (!Number.isFinite(da.getFullYear())) return null;
+        return da;
+    },
+    ts_to_string: (a) => {
+        if (!a || !(a instanceof Date)) return null;
+        return a.toISOString();
+    },
+    ts_fmt: a => {
+        if (!a || !(a instanceof Date)) return null;
+        return formatDate(a) + ' ' + formatTime(a);
+    },
+    ts_add: (t, a, b) => {
+        if (!'smhdwMy'.includes(t) || !a || !(a instanceof Date) || typeof b !== 'number') return null;
+        const da = new Date(a);
+        if (t === 's') da.setSeconds(da.getSeconds() + b);
+        if (t === 'm') da.setMinutes(da.getMinutes() + b);
+        if (t === 'h') da.setHours(da.getHours() + b);
+        if (t === 'd') da.setDate(da.getDate() + b);
+        if (t === 'w') da.setDate(da.getDate() + b * 7);
+        if (t === 'M') da.setMonth(da.getMonth() + b);
+        if (t === 'y') da.setFullYear(da.getFullYear() + b);
+        return da;
+    },
+    ts_sub: (t, a, b) => {
+        if (!'smhdwMy'.includes(t) || !a || !(a instanceof Date) || !b || !(b instanceof Date)) return null;
+        if (t === 's') return (a - b) / 1000;
+        if (t === 'm') return (a - b) / (60 * 1000);
+        if (t === 'h') return (a - b) / (3600 * 1000);
+        if (t === 'd') return (a - b) / (86400 * 1000);
+        if (t === 'w') return (a - b) / (7 * 86400 * 1000);
+        if (t === 'M') return subMonths(a, b);
+        if (t === 'y') return subMonths(a, b) / 12;
+    },
+    ts_get: (t, tz, a) => {
+        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || typeof tz !== 'number') return null;
+        // add the time zone offset to a such that we're basically rotating the desired time zone
+        // to UTC
+        const da = new Date(+a + tz * 60000);
+        if (t === 's') return da.getUTCSeconds();
+        if (t === 'm') return da.getUTCMinutes();
+        if (t === 'h') return da.getUTCHours();
+        if (t === 'd') return da.getUTCDate();
+        if (t === 'M') return da.getUTCMonth() + 1;
+        if (t === 'y') return da.getUTCFullYear();
+        return null;
+    },
+    ts_set: (t, tz, a, b) => {
+        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || typeof tz !== 'number' || typeof b !== 'number') return null;
+        // add the time zone offset to a such that we're basically rotating the desired time zone
+        // to UTC
+        const da = new Date(+a + tz * 60000);
+        if (t === 's') da.setUTCSeconds(b);
+        if (t === 'm') da.setUTCMinutes(b);
+        if (t === 'h') da.setUTCHours(b);
+        if (t === 'd') da.setUTCDate(b);
+        if (t === 'M') da.setUTCMonth(b - 1);
+        if (t === 'y') da.setUTCFullYear(b);
+        // rotate back
+        return new Date(+da - tz * 60000);
     },
 
     currency_fmt: (a, b) => {
@@ -450,6 +552,16 @@ function padz (s, n) {
 }
 function dateToString (d) {
     return padz('0000', d.getUTCFullYear()) + '-' + padz('00', d.getUTCMonth() + 1) + '-' + padz('00', d.getUTCDate());
+}
+
+function timezoneOffsetString (tz) {
+    tz = Math.round(tz % (12 * 60));
+    if (!tz) return 'Z';
+    const sign = tz > 0 ? '+' : '-';
+    const atz = Math.abs(tz);
+    const hours = Math.floor(atz / 60);
+    const minutes = Math.floor(atz % 60);
+    return sign + padz('00', hours) + padz('00', minutes);
 }
 
 function daysInMonth (year, month) {
