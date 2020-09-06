@@ -13,6 +13,7 @@ import {
     isValid,
     TypeVar,
     FuncType,
+    TypeMapping,
     UnresolvedType,
     stdlibTypes,
 } from './types';
@@ -269,12 +270,14 @@ export function analyzeScoped (definitions, id, context) {
         if (!Array.isArray(item.p)) return invalidFormatError;
         if (typeof item.b !== 'object' || item.b === null) return invalidFormatError;
         defTypes.add('f');
-        const paramVars = [];
-        const params = {};
+        const bindings = [];
+        const patterns = [];
+        const params = {}; // defs
         for (const p of item.p) {
             if (typeof p !== 'string') return invalidFormatError;
             const pv = new TypeVar();
-            paramVars.push(pv);
+            bindings.push(pv);
+            patterns.push(pv);
             params[p] = { t: VM_FN_PARAM, type: pv };
         }
 
@@ -299,7 +302,7 @@ export function analyzeScoped (definitions, id, context) {
         addDefTypes(retNode.defTypes);
         addStdUsage(retNode.stdUsage);
 
-        type = new FuncType(paramVars, retNode.type);
+        type = new FuncType([new TypeMapping(bindings, patterns, retNode.type)]);
     } else if (item.t === 'w') {
         if (!Array.isArray(item.m)) return invalidFormatError;
 
@@ -337,6 +340,7 @@ export function analyzeScoped (definitions, id, context) {
                 type: Errors.TYPE_ERROR,
                 path: context.path.concat([id]),
                 item,
+                error: type,
             },
         };
     }

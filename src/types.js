@@ -35,6 +35,7 @@ export function signature (type) {
 /// If the number of arguments is incorrect, will return an abnormal type.
 export function apply (recv, args) {
     if (!Array.isArray(args)) throw new Error('args must be an array');
+    for (const arg of args) if (arg === NEVER) return NEVER; // never is poison
     if (recv === NEVER) return NEVER;
     if (typeof recv === 'symbol') return new AppliedType(recv, args, SECRET);
     return recv.apply(args);
@@ -221,7 +222,7 @@ export class AppliedType {
         this.args = args;
     }
     get signature () {
-        return '(' + signature(this.recv) + '(' + this.args.map(signature).join(',') + '))';
+        return '(' + signature(this.recv) + ' ' + this.args.map(signature).join(' ') + ')';
     }
     get isConcrete () {
         return isConcrete(this.recv) && this.args.map(isConcrete).reduce((a, b) => a && b, true);
@@ -288,6 +289,14 @@ export class FuncType {
         return true;
     }
     subst (k, v) {
+        if (k instanceof UnresolvedType) {
+            const newMappings = [];
+            for (const mapping of this.mappings) {
+                newMappings.push(mapping.subst(k, v));
+            }
+            return new FuncType(newMappings);
+        }
+
         // substitutions can't touch the function body, because:
         // (1) type reductions will never need to use this since they will always apply beforehand
         // (2) this would cause namespacing issues with type variables
@@ -301,6 +310,7 @@ export class FuncType {
         for (const mapping of this.mappings) {
             const applied = mapping.matchApply(tys);
             if (applied) return reduce(reduce(applied)); // reducing twice gives better results
+            else if (applied === null) return new AppliedType(this, tys, SECRET); // can't apply type var
         }
 
         // no applicable mapping could be found; the function is undefined at these inputs
@@ -367,22 +377,36 @@ export class TypeMapping {
     get isValid () {
         return isValid(this.type);
     }
+    subst (k, v) {
+        return new TypeMapping(this.bindings, this.patterns, subst(this.type, k, v));
+    }
+    /// Tries to match and apply the given arguments to this mapping.
+    ///
+    /// - returns a type if successful
+    /// - returns null if there is a type variable argument
+    /// - returns false if it doesn't match
     matchApply (tys) {
         if (tys.length !== this.patterns.length) return new ErrorType('argc');
+
+        let hasVarArg = false;
 
         // Bindings. Mapping our own type variables (found in this.bindings) to types from `tys`.
         const bindings = new Map();
         // Matches a type pattern.
         const matchPattern = (pat, ty) => {
+            if (ty instanceof TypeVar) {
+                hasVarArg = true;
+                return false;
+            }
             // concrete types can just be matched directly
             if (typeof pat === 'symbol') return pat === ty;
             else if (pat instanceof AppliedType) {
                 // applications must match their receiver and their arguments
                 if (!(ty instanceof AppliedType)) return false;
                 if (pat.args.length !== ty.args.length) return false;
-                matchPattern(pat.recv, ty.recv);
+                if (!matchPattern(pat.recv, ty.recv)) return false;
                 for (let i = 0; i < pat.args.length; i++) {
-                    matchPattern(pat.args[i], ty.args[i]);
+                    if (!matchPattern(pat.args[i], ty.args[i])) return false;
                 }
                 return true;
             } else if (pat instanceof FunctionPattern) {
@@ -402,7 +426,10 @@ export class TypeMapping {
         };
 
         for (let i = 0; i < this.patterns.length; i++) {
-            if (!matchPattern(this.patterns[i], tys[i])) return null;
+            if (!matchPattern(this.patterns[i], tys[i])) {
+                if (hasVarArg) return null; // can't apply a type var!
+                return false;
+            }
         }
 
         // all patterns matched!
@@ -520,39 +547,30 @@ const mathCmpOp = createPolyFn([[any(), any(), B]]);
 const binaryBoolOp = createPolyFn([[any(), any(), B]]);
 
 const mapType = withVar(a => withVar(b => createPolyFn([
-    [new FuncType([S], S), S, S],
-    [new FuncType([a], S), array(a), S],
-    [new FuncType([S], b), S, array(b)],
-    [new FuncType([a], b), array(a), array(b)],
-    [new FuncType([a], b), a, b],
-    [a, array(b), array(a)],
+    [a, S, S],
+    [a, array(b), array(apply(a, [b]))],
     [a, b, apply(a, [b])],
 ])));
 
 const flatMapType = withVar(a => withVar(b => createPolyFn([
-    [new FuncType([S], S), S, S],
-    [new FuncType([a], S), array(a), S],
-    [new FuncType([S], array(b)), S, array(b)],
-    [new FuncType([a], array(b)), array(a), array(b)],
-    [new FuncType([a], array(b)), a, array(b)],
-    [new FuncType([a], b), a, array(b)],
-    [a, array(b), array(a)],
+    [a, S, S],
+    [a, array(b), apply(a, [b])],
     [a, b, array(apply(a, [b]))],
 ])));
 const fold1Type = withVar(a => withVar(b => createPolyFn([
-    [new FuncType([S, S], S), S, S],
-    [new FuncType([a, a], a), array(a), a],
+    [a, S, apply(a, [S, S])],
+    [a, array(b), apply(a, [b, b])],
     [a, b, a],
 ])));
-const foldType = withVar(a => withVar(b => createPolyFn([
-    [new FuncType([a, S], a), a, S, a],
-    [new FuncType([a, b], a), a, array(b), a],
-    [a, b, any(), a],
-])));
+const foldType = withVar(a => withVar(b => withVar(c => createPolyFn([
+    [a, b, S, apply(a, [b, S])],
+    [a, b, array(c), apply(a, [b, c])],
+    [a, b, c, apply(a, [b, c])],
+]))));
 const filterType = withVar(a => withVar(b => createPolyFn([
     // we do not need to distinguish between any and bool here because the outcome
     // will be the same
-    [new FuncType([a], b), array(a), array(a)],
+    [a, array(b), array(b)],
     [a, b, b],
 ])));
 
@@ -629,8 +647,8 @@ export const stdlibTypes = {
     ts_parse: createPolyFn([[S, union([Timestamp, U])], [any(), U]]),
     ts_to_string: createPolyFn([[Timestamp, S], [any(), U]]),
     ts_fmt: createPolyFn([[Timestamp, S], [any(), U]]),
-    ts_add: createPolyFn([[S, Timestamp, N], union([Timestamp, U]), [any(), any(), any(), U]]),
-    ts_sub: createPolyFn([[S, Timestamp, Timestamp], union([N, U]), [any(), any(), any(), U]]),
+    ts_add: createPolyFn([[S, Timestamp, N, union([Timestamp, U])], [any(), any(), any(), U]]),
+    ts_sub: createPolyFn([[S, Timestamp, Timestamp, union([N, U])], [any(), any(), any(), U]]),
     ts_get: createPolyFn([[S, N, Timestamp, union([N, U])], [any(), any(), any(), U]]),
     ts_set: createPolyFn([[S, N, Timestamp, N, union([Timestamp, U])], [any(), any(), any(), any(), U]]),
     datetime_fmt: createPolyFn([[N, S], [any(), U]]),
