@@ -599,7 +599,7 @@ export const stdlibTypes = {
     or: binaryBoolOp,
     not: binaryBoolOp,
     xor: binaryBoolOp,
-    cat: withVar(a => withVar(b => createPolyFn([
+    '++': withVar(a => withVar(b => createPolyFn([
         [array(a), array(b), array(union([a, b]))],
         [a, array(b), array(union([a, b]))],
         [array(a), b, array(union([a, b]))],
