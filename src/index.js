@@ -1,6 +1,6 @@
 export { evaluate, evaluateScoped } from './eval';
 export { VMFun } from './vmfun';
-export { analyze, analyzeAll, analyzeScoped, Errors } from './analyze';
+export { analyze, analyzeAll, analyzeScoped, Errors, getInnerArrayType } from './analyze';
 export { currencies, stdlib, stdlibExt } from './stdlib';
 export {
     NEVER,

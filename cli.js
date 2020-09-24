@@ -12,7 +12,7 @@ process.stdin.on('end', () => {
     const defs = JSON.parse(input);
     for (const k in defs) {
         if (doAnalyze) {
-            const analysis = analyze(defs, k, {});
+            const analysis = analyze([defs], k, {});
             if (!analysis.valid) {
                 console.log(k, ':: invalid', analysis.error);
             } else {
@@ -29,7 +29,7 @@ process.stdin.on('end', () => {
                 console.log(k, 'used stdlib items:', analysis.stdUsage);
             }
         } else {
-            console.log(k, '->', evaluate(defs, k, () => null));
+            console.log(k, '->', evaluate([defs], k, () => null));
         }
     }
 });

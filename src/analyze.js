@@ -82,7 +82,7 @@ function buildContext (formValues) {
 /// so it might be best to wrap this in a try/catch.
 ///
 /// # Parameters
-/// - definitions: definitions object
+/// - definitions: array of definitions objects (see evaluate(...) for details)
 /// - id: name of the definition to analyze
 /// - formValues: one of the following:
 ///   - an object mapping form values to their types. If a referenced form value is not in
@@ -90,8 +90,8 @@ function buildContext (formValues) {
 ///   - a function that maps ids to their types, or null.
 export function analyze (definitions, id, formValues) {
     const [stdDefs, context] = buildContext(formValues);
-    const defs = { ...stdDefs, ...definitions };
-    const item = analyzeScoped(defs, id, context);
+    const defs = [stdDefs].concat(definitions);
+    const item = analyzeScoped(defs, defs.length - 1, id, context);
     if (item.type) {
         // resolve unresolved types
         for (const [k, v] of context.resolveMap) {
@@ -108,8 +108,8 @@ export function analyze (definitions, id, formValues) {
 export function analyzeAll (definitions, formValues) {
     const [stdDefs, context] = buildContext(formValues);
     const data = {};
-    const defs = { ...stdDefs, ...definitions };
-    for (const k in definitions) data[k] = analyzeScoped(defs, k, context);
+    const defs = [stdDefs].concat(definitions);
+    for (const k in definitions) data[k] = analyzeScoped(defs, defs.length - 1, k, context);
     // resolve unresolved types
     for (const k in data) {
         const item = data[k];
@@ -125,10 +125,11 @@ export function analyzeAll (definitions, formValues) {
 /// Analyzes the given definitions. Try using `analyze` or `analyzeAll` instead, though.
 ///
 /// # Parameters
-/// - definitions: definitions object
+/// - definitions: array of definitions objects
+/// - index: which stack item are we in right now?
 /// - id: id to analyze
 /// - context: context object. See buildContext
-export function analyzeScoped (definitions, id, context) {
+export function analyzeScoped (definitions, index, id, context) {
     if (typeof id !== 'string' && typeof id !== 'symbol') {
         // identifiers must be strings or symbols
         return {
@@ -144,7 +145,21 @@ export function analyzeScoped (definitions, id, context) {
         if (ty) return { valid: true, type: ty, defTypes: new Set(), stdUsage: new Set() };
     }
 
-    const item = definitions[id];
+    // resolve definition in stack. Prefer later items
+    let item, itemIndex;
+    // only allow definitions that do not start with an _ to be referenced in a child scope
+    if (typeof id === 'string' && id.startsWith('_')) {
+        itemIndex = index;
+        item = definitions[itemIndex][id];
+    } else {
+        for (let i = index; i >= 0; i--) {
+            if (id in definitions[i]) {
+                item = definitions[i][id];
+                itemIndex = i;
+                break;
+            }
+        }
+    }
     if (!item) {
         // identifier couldn’t be resolved
         return {
@@ -242,7 +257,7 @@ export function analyzeScoped (definitions, id, context) {
         defTypes.add('l');
         const refTypes = [];
         for (const ref of item.v) {
-            const node = analyzeScoped(definitions, ref, context);
+            const node = analyzeScoped(definitions, itemIndex, ref, context);
             if (!node.valid) return node;
             addDefTypes(node.defTypes);
             addStdUsage(node.stdUsage);
@@ -253,13 +268,13 @@ export function analyzeScoped (definitions, id, context) {
         if (typeof item.f !== 'string' && typeof item.f !== 'symbol') return invalidFormatError;
         if (('a' in item) && !Array.isArray(item.a)) return invalidFormatError;
         defTypes.add('c');
-        const fnNode = analyzeScoped(definitions, item.f, context);
+        const fnNode = analyzeScoped(definitions, itemIndex, item.f, context);
         if (!fnNode.valid) return fnNode;
         addDefTypes(fnNode.defTypes);
         addStdUsage(fnNode.stdUsage);
         const argTypes = [];
         for (const arg of (item.a || [])) {
-            const node = analyzeScoped(definitions, arg, context);
+            const node = analyzeScoped(definitions, itemIndex, arg, context);
             if (!node.valid) return node;
             addDefTypes(node.defTypes);
             addStdUsage(node.stdUsage);
@@ -281,19 +296,9 @@ export function analyzeScoped (definitions, id, context) {
             params[p] = { t: VM_FN_PARAM, type: pv };
         }
 
-        // only allow definitions that do not start with an _ to be referenced in the child scope
-        const allowedParentScopeDefs = {};
-        for (const n in definitions) {
-            if (typeof n === 'symbol' || !n.startsWith('_')) {
-                allowedParentScopeDefs[n] = definitions[n];
-            }
-        }
-
-        const retNode = analyzeScoped({
-            ...allowedParentScopeDefs,
-            ...params,
-            ...item.b,
-        }, '=', {
+        const fnDefs = definitions.slice(0, itemIndex + 1);
+        fnDefs.push({ ...params, ...item.b });
+        const retNode = analyzeScoped(fnDefs, fnDefs.length - 1, '=', {
             ...context,
             path: context.path.concat([id]),
         });
@@ -311,10 +316,10 @@ export function analyzeScoped (definitions, id, context) {
         for (const xcase of item.m) {
             if (typeof xcase !== 'object') return invalidFormatError;
             if (typeof xcase.c === 'string' || typeof xcase.c === 'symbol') {
-                const condNode = analyzeScoped(definitions, xcase.c, context);
+                const condNode = analyzeScoped(definitions, itemIndex, xcase.c, context);
                 if (!condNode.valid) return condNode;
             }
-            const valNode = analyzeScoped(definitions, xcase.v, context);
+            const valNode = analyzeScoped(definitions, itemIndex, xcase.v, context);
             if (!valNode.valid) return valNode;
             cases.push(valNode.type);
         }
@@ -363,7 +368,7 @@ export function analyzeScoped (definitions, id, context) {
 /// Determines the type of a hetereogenous array of values.
 ///
 /// If multiple types are present, returns a union. If no values are present, returns a type var.
-function getInnerArrayType (value) {
+export function getInnerArrayType (value) {
     if (value.length) {
         const unionTypes = [];
         for (const x of value) {
