@@ -13,7 +13,7 @@ import { VMFun, VM_FN_PARAM } from './vmfun';
 /// - getFormValue: (name: string) => value:
 ///   will be used to get the value of @-prefixed identifiers.
 ///   value must be one of: null, bool, number, string, Date, or an array of any of these values
-///   (including arrays).
+///   (including arrays, excluding Dates).
 /// - options: additional options (all optional)
 ///     - debug: set to 1 to print warnings
 ///     - shouldHalt: pass a closure that returns a boolean when called to limit the allowed time
