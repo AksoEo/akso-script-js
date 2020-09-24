@@ -31,4 +31,15 @@ function assertEq (a, b, msgParent) {
     }
 }
 
-module.exports = { assert, assertEq };
+function assertThrows (f, msg) {
+    let err;
+    try {
+        f();
+        err = new Error('Assertion failed: ' + msg);
+    } catch (err) {
+        // ok
+    }
+    if (err) throw err;
+}
+
+module.exports = { assert, assertEq, assertThrows };

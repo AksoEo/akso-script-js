@@ -35,7 +35,7 @@ export function signature (type) {
 /// If the number of arguments is incorrect, will return an abnormal type.
 export function apply (recv, args) {
     if (!Array.isArray(args)) throw new Error('args must be an array');
-    for (const arg of args) if (arg === NEVER) return NEVER; // never is poison
+    for (const arg of args) if (doesHalt(arg) === false) return NEVER; // never is poison
     if (recv === NEVER) return NEVER;
     if (typeof recv === 'symbol') return new AppliedType(recv, args, SECRET);
     return recv.apply(args);

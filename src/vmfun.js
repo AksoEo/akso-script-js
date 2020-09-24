@@ -51,7 +51,7 @@ export class NVMFun extends VMFun {
         }
         for (let i = 0; i < this.body.length; i++) {
             const arg = args[i];
-            if (arg === undefined) this[this.bodyName + ERRS](`undefined argument at index ${i}`);
+            if (arg === undefined) this[this.bodyName + ERRS](`Undefined argument at index ${i}`);
         }
         return this.body(...args);
     }
