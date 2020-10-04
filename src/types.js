@@ -485,7 +485,8 @@ export class ErrorType {
 }
 
 export function createPrimitiveType (name) {
-    return class {
+    const classContainer = {};
+    classContainer[name] = class {
         get signature () {
             return name;
         }
@@ -508,6 +509,7 @@ export function createPrimitiveType (name) {
             return this;
         }
     };
+    return new classContainer[name]();
 }
 
 export const Timestamp = createPrimitiveType('timestamp');
