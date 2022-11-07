@@ -321,7 +321,20 @@ export const stdlib = nvmify({
     },
     find_index: (a, b) => {
         if (typeof a !== 'string' && !Array.isArray(a) || !a.length) return null;
-        const index = a.indexOf(b);
+        let index;
+        if (typeof b === 'object') {
+            // needs complex ==
+            index = -1;
+            for (let i = 0; i < a.length; i++) {
+                if (eq(a[i], b)) {
+                    index = i;
+                    break;
+                }
+            }
+        } else {
+            // we can use javascript ==
+            index = a.indexOf(b);
+        }
         if (index === -1) return null;
         return index;
     },
