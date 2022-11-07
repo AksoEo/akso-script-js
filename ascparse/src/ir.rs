@@ -95,6 +95,7 @@ const STDLIB_NAMES: &[&str] = &[
     "fold",
     "fold1",
     "index",
+    "find_index",
     "length",
     "contains",
     "head",

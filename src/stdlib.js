@@ -319,6 +319,12 @@ export const stdlib = nvmify({
         if (b === null || typeof b !== 'number' || (b | 0) !== b || b < 0 || b >= a.length) return null;
         return a[b];
     },
+    find_index: (a, b) => {
+        if (typeof a !== 'string' && !Array.isArray(a) || !a.length) return null;
+        const index = a.indexOf(b);
+        if (index === -1) return null;
+        return index;
+    },
     length: a => {
         if (typeof a !== 'string' && !Array.isArray(a)) return null;
         return a.length;

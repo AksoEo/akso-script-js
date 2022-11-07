@@ -617,6 +617,11 @@ export const stdlibTypes = {
         [S, N, union([U, S])],
         [any(), any(), U],
     ])),
+    find_index: withVar(a => createPolyFn([
+        [array(a), a, union([U, N])],
+        [S, S, union([U, N])],
+        [any(), any(), U],
+    ])),
     length: createPolyFn([
         [array(any()), N],
         [S, N],
