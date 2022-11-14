@@ -92,16 +92,30 @@ function defUn (f, ty, z = null) {
 }
 const defUnMath = f => defUn(f, 'number');
 
+function stringify(value) {
+    if (value === null) return '';
+    if (value === false) return 'ne';
+    if (value === true) return 'jes';
+    if (value instanceof Date) return formatDate(value);
+    if (Array.isArray(value)) return value.map(stringify).join(', ');
+    return value.toString();
+}
+
 function concatenate (a, b) {
-    if (typeof a === 'string' && typeof b === 'string') return a + b;
-    // turn it into arrays!
-    if (Array.isArray(a)) void 0;
-    else if (typeof a === 'string') a = a.split('');
-    else a = [a];
-    if (Array.isArray(b)) void 0;
-    else if (typeof b === 'string') b = b.split('');
-    else b = [b];
-    return a.concat(b);
+    if (Array.isArray(a) || Array.isArray(b)) {
+        // if one of them is an array, turn it into arrays
+        if (Array.isArray(a)) void 0;
+        else if (typeof a === 'string') a = a.split('');
+        else a = [a];
+        if (Array.isArray(b)) void 0;
+        else if (typeof b === 'string') b = b.split('');
+        else b = [b];
+        return a.concat(b);
+    }
+    // otherwise, strings
+    a = stringify(a);
+    b = stringify(b);
+    return a + b;
 }
 
 export const stdlibExt = {

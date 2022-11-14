@@ -605,7 +605,7 @@ export const stdlibTypes = {
         [array(a), array(b), array(union([a, b]))],
         [a, array(b), array(union([a, b]))],
         [array(a), b, array(union([a, b]))],
-        [a, b, array(union([a, b]))],
+        [a, b, S],
     ]))),
     map: mapType,
     flat_map: flatMapType,
