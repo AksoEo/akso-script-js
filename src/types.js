@@ -546,6 +546,7 @@ const binaryMathOp = createPolyFn([[N, N, N], [any(), any(), U]]);
 const unaryMathOp = createPolyFn([[N, N], [any(), U]]);
 
 const mathCmpOp = createPolyFn([[any(), any(), B]]);
+const unaryBoolOp = createPolyFn([[any(), B]]);
 const binaryBoolOp = createPolyFn([[any(), any(), B]]);
 
 const mapType = withVar(a => withVar(b => createPolyFn([
@@ -599,7 +600,7 @@ export const stdlibTypes = {
     '<=': mathCmpOp,
     and: binaryBoolOp,
     or: binaryBoolOp,
-    not: binaryBoolOp,
+    not: unaryBoolOp,
     xor: binaryBoolOp,
     '++': withVar(a => withVar(b => createPolyFn([
         [array(a), array(b), array(union([a, b]))],
