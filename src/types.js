@@ -628,7 +628,7 @@ export const stdlibTypes = {
         [S, N],
         [any(), U],
     ]),
-    contains: createPolyFn([[0, 1, B]]),
+    contains: createPolyFn([[any(), any(), B]]),
     sort: withVar(a => createPolyFn([
         [array(a), array(a)],
         [S, S],
