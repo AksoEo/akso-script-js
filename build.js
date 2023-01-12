@@ -3,7 +3,7 @@ const babel = require('rollup-plugin-babel');
 const pkg = require('./package.json');
 const https = require('https');
 
-const countriesSource = 'https://apitest.akso.org/countries?fields=code,name_eo&limit=300';
+const countriesSource = 'https://api.akso.org/v1/countries?fields=code,name_eo&limit=300';
 
 const aksoScriptPlugin = (countries) => {
     return {
@@ -40,7 +40,7 @@ const inputOptions = (esm, countries) => ({
         ],
     }) : null,
     ].filter(x => x),
-    external: id => id === '.' || id.startsWith('core-js') || id.startsWith('regenerator-runtime') || id === 'google-libphonenumber',
+    external: id => id === '.' || id.startsWith('core-js') || id.startsWith('regenerator-runtime') || id === 'google-libphonenumber' || id === 'luxon',
 });
 const outputOptions = esm => ({
     dir: esm ? 'dist-esm' : 'dist',

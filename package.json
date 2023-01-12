@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "core-js": "^3.6.5",
-    "google-libphonenumber": "^3.2.13"
+    "google-libphonenumber": "^3.2.13",
+    "luxon": "^3.2.1"
   }
 }

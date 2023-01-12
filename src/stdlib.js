@@ -1,4 +1,5 @@
 import { VMFun, NVMFun } from './vmfun';
+import { DateTime, FixedOffsetZone } from 'luxon';
 
 // Maps currencies to their smallest unit multiplier
 export const currencies = {
@@ -458,21 +459,29 @@ export const stdlib = nvmify({
         return Math.floor(a.getTime() / 1000);
     },
     ts_from_date: (a, tz, h, m, s) => {
-        if (typeof tz !== 'number' || typeof h !== 'number' || typeof m !== 'number' || typeof s !== 'number') return null;
+        if ((typeof tz !== 'number' && typeof tz !== 'string') || typeof h !== 'number' || typeof m !== 'number' || typeof s !== 'number') return null;
         if (parseDateString(a) === null) return null;
 
-        const da = new Date(`${a}T00:00:00${timezoneOffsetString(tz)}`);
-        da.setHours(da.getHours() + h);
-        da.setMinutes(da.getMinutes() + m);
-        da.setSeconds(da.getSeconds() + s);
-        return da;
+        let tzFormat = 'z';
+        if (typeof tz === 'number') {
+            tz = timezoneOffsetString(tz);
+            tzFormat = 'ZZZ';
+        }
+
+        const dt = DateTime.fromFormat(
+            `${a}T${padz('00', h)}:${padz('00', m)}:${padz('00', s)} ${tz}`,
+            `yyyy-MM-dd'T'HH:mm:ss ${tzFormat}`,
+        );
+
+        return dt.toJSDate();
     },
     ts_to_date: (a, tz) => {
-        if (!a || !(a instanceof Date) || typeof tz !== 'number') return null;
-        // add the time zone offset to a such that we're basically rotating the desired time zone
-        // to UTC
-        const da = new Date(+a + tz * 60000);
-        return da.toISOString().split('T')[0];
+        if (!a || !(a instanceof Date) || (typeof tz !== 'number' && typeof tz !== 'string')) return null;
+
+        if (typeof tz === 'number') tz = FixedOffsetZone.instance(tz);
+
+        const dt = DateTime.fromJSDate(a);
+        return dt.setZone(tz).toISODate();
     },
     ts_parse: (a) => {
         if (typeof a !== 'string') return null;
@@ -511,31 +520,37 @@ export const stdlib = nvmify({
         if (t === 'y') return subMonths(a, b) / 12;
     },
     ts_get: (t, tz, a) => {
-        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || typeof tz !== 'number') return null;
-        // add the time zone offset to a such that we're basically rotating the desired time zone
-        // to UTC
-        const da = new Date(+a + tz * 60000);
-        if (t === 's') return da.getUTCSeconds();
-        if (t === 'm') return da.getUTCMinutes();
-        if (t === 'h') return da.getUTCHours();
-        if (t === 'd') return da.getUTCDate();
-        if (t === 'M') return da.getUTCMonth() + 1;
-        if (t === 'y') return da.getUTCFullYear();
+        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || (typeof tz !== 'number' && typeof tz !== 'string')) return null;
+
+        if (typeof tz === 'number') tz = FixedOffsetZone.instance(tz);
+        const dt = DateTime.fromJSDate(a).setZone(tz);
+
+        let value = null;
+        if (t === 's') value = dt.second;
+        if (t === 'm') value = dt.minute;
+        if (t === 'h') value = dt.hour;
+        if (t === 'd') value = dt.date;
+        if (t === 'M') value = dt.month;
+        if (t === 'y') value = dt.year;
+
+        if (Number.isFinite(value)) return value;
         return null;
     },
     ts_set: (t, tz, a, b) => {
-        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || typeof tz !== 'number' || typeof b !== 'number') return null;
-        // add the time zone offset to a such that we're basically rotating the desired time zone
-        // to UTC
-        const da = new Date(+a + tz * 60000);
-        if (t === 's') da.setUTCSeconds(b);
-        if (t === 'm') da.setUTCMinutes(b);
-        if (t === 'h') da.setUTCHours(b);
-        if (t === 'd') da.setUTCDate(b);
-        if (t === 'M') da.setUTCMonth(b - 1);
-        if (t === 'y') da.setUTCFullYear(b);
-        // rotate back
-        return new Date(+da - tz * 60000);
+        if (!'smhdMy'.includes(t) || !a || !(a instanceof Date) || (typeof tz !== 'number' && typeof tz !== 'string') || typeof b !== 'number') return null;
+
+        if (typeof tz === 'number') tz = FixedOffsetZone.instance(tz);
+        const dt = DateTime.fromJSDate(a).setZone(tz);
+        console.log(DateTime.fromJSDate(a), dt);
+
+        if (t === 's') return dt.set({ second: b }).toJSDate();
+        if (t === 'm') return dt.set({ minute: b }).toJSDate();
+        if (t === 'h') return dt.set({ hour: b }).toJSDate();
+        if (t === 'd') return dt.set({ date: b }).toJSDate();
+        if (t === 'M') return dt.set({ month: b}).toJSDate();
+        if (t === 'y') return dt.set({ year: b }).toJSDate();
+
+        return dt;
     },
 
     currency_fmt: (a, b) => {
@@ -589,8 +604,7 @@ function dateToString (d) {
 
 function timezoneOffsetString (tz) {
     tz = Math.round(tz % (12 * 60));
-    if (!tz) return 'Z';
-    const sign = tz > 0 ? '+' : '-';
+    const sign = tz >= 0 ? '+' : '-';
     const atz = Math.abs(tz);
     const hours = Math.floor(atz / 60);
     const minutes = Math.floor(atz % 60);
